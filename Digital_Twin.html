@@ -1009,6 +1009,10 @@ loader.load(GLB_PATH,
     panX = 0; panY = 0; panZ = 0;
     // 지형 평면 위치: 모델 바닥보다 살짝 아래
     terrainMesh.position.y = -size.y / 2 - 2;
+    // 지형도 위치 오프셋: 실제 청담대교 좌표 기준 정렬
+    // 교량 슬래브 시작점(37.5315, 127.0667) 기준
+    terrainMesh.position.x = -186.2;
+    terrainMesh.position.z = -503.5;
     const maxDim = Math.max(size.x, size.y, size.z);
     radius = maxDim * 1.8;
     camera.far = maxDim*50; camera.near = maxDim*0.0005;
