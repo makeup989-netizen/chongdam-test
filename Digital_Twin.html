@@ -896,24 +896,25 @@ function tileXYToLatLng(tileX, tileY, zoom) {
   return { lat, lng };
 }
 
-// Google Maps XYZ 타일로 고화질 위성 이미지 로드
+// Google Maps XYZ 타일로 청담대교 5km 이내 위성 이미지 로드
+// zoom 16: 타일 1장 = 약 2,400m, 5×5 = 25장으로 5km 반경 커버
 async function loadSatelliteTerrain(modelSize) {
-  const ZOOM     = 18;    // zoom 18 = 약 0.6m/px (위도 37°)
-  const TILE_PX  = 256;   // XYZ 타일 1장 = 256px
+  const ZOOM    = 16;    // 5km 반경 고화질 zoom
+  const TILE_PX = 256;   // XYZ 타일 1장 = 256px
 
-  // zoom 18, 위도 37° 기준 1타일의 실제 거리 (미터)
+  // zoom 16, 위도 37° 기준 1타일의 실제 거리 (미터)
   const TILE_M = 2 * Math.PI * 6378137 * Math.cos(BRIDGE_LAT * Math.PI / 180) / Math.pow(2, ZOOM);
 
   // 청담대교 중심 타일 번호
   const center = latLngToTileXY(BRIDGE_LAT, BRIDGE_LNG, ZOOM);
 
-  // 모델 크기 기준 필요한 타일 수 (여유 2칸)
-  const maxDim = Math.max(modelSize.x, modelSize.z);
-  const HALF   = Math.ceil(maxDim / TILE_M / 2) + 2;
-  const COLS   = HALF * 2 + 1;
-  const ROWS   = HALF * 2 + 1;
+  // 5km 반경 커버: 5×5 = 25장
+  const COLS_HALF = 2;   // 좌우 2장씩 = 총 5장
+  const ROWS_HALF = 2;   // 상하 2장씩 = 총 5장
+  const COLS = COLS_HALF * 2 + 1;
+  const ROWS = ROWS_HALF * 2 + 1;
 
-  // Canvas 생성 (타일 수 × 256px)
+  // Canvas 생성
   const cvs = document.createElement('canvas');
   cvs.width  = COLS * TILE_PX;
   cvs.height = ROWS * TILE_PX;
@@ -921,20 +922,18 @@ async function loadSatelliteTerrain(modelSize) {
   ctx.fillStyle = '#1a3a4a';
   ctx.fillRect(0, 0, cvs.width, cvs.height);
 
-  // XYZ 타일 병렬 로드 → 정확한 격자 위치에 그리기
+  // XYZ 타일 병렬 로드
   const promises = [];
-  for (let dy = -HALF; dy <= HALF; dy++) {
-    for (let dx = -HALF; dx <= HALF; dx++) {
-      const tx  = center.tileX + dx;
-      const ty  = center.tileY + dy;
-      // Google Maps XYZ 타일 URL (API 키 필요)
+  for (let dy = -ROWS_HALF; dy <= ROWS_HALF; dy++) {
+    for (let dx = -COLS_HALF; dx <= COLS_HALF; dx++) {
+      const tx = center.tileX + dx;
+      const ty = center.tileY + dy;
       const url = `https://maps.googleapis.com/maps/vt?lyrs=s,h&x=${tx}&y=${ty}&z=${ZOOM}&key=${GOOGLE_MAPS_API_KEY}`;
-      // Canvas 상의 픽셀 위치 (dx, dy → 좌→우, 위→아래)
-      const px  = (dx + HALF) * TILE_PX;
-      const py  = (dy + HALF) * TILE_PX;
+      const px  = (dx + COLS_HALF) * TILE_PX;
+      const py  = (dy + ROWS_HALF) * TILE_PX;
 
       promises.push(new Promise(resolve => {
-        const img  = new Image();
+        const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload  = () => { ctx.drawImage(img, px, py, TILE_PX, TILE_PX); resolve(); };
         img.onerror = () => resolve();
@@ -959,7 +958,7 @@ async function loadSatelliteTerrain(modelSize) {
   terrainMesh.geometry.dispose();
   terrainMesh.geometry = new THREE.PlaneGeometry(totalW, totalH, 1, 1);
 
-  console.log(`[지형] XYZ 타일 완료 (${COLS}×${ROWS}장, ${totalW.toFixed(0)}×${totalH.toFixed(0)}m, zoom ${ZOOM})`);
+  console.log(`[지형] 한강 전체 타일 완료 (${COLS}×${ROWS}장, ${(totalW/1000).toFixed(1)}×${(totalH/1000).toFixed(1)}km, zoom ${ZOOM})`);
 }
 // ──────────────────────────────────────────────────
 
