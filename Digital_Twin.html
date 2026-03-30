@@ -683,7 +683,7 @@
 
 // PC 폴더 구조: PC/Digital_Twin.html, output/chongdam_bridge.glb
 // GLB 파일은 GitHub LFS에서 직접 로드 (Cloudflare Pages 25MB 제한 우회)
-const GLB_PATH = 'https://media.githubusercontent.com/media/makeup989-netizen/chongdam-glb/master/chongdam_bridge.glb';
+const GLB_PATH = 'https://media.githubusercontent.com/media/makeup989-netizen/chongdam-test/master/output/chongdam_bridge.glb';
 
 // 상태평가 등급별 색상
 const GRADE_COLORS = {
@@ -861,14 +861,96 @@ fillLight.position.set(-100, 50, -100);
 scene.add(fillLight);
 scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 0.8));
 
-const seaGeo = new THREE.PlaneGeometry(2000, 2000, 80, 80);
-const seaMat = new THREE.MeshStandardMaterial({ color:0x0A3A5C, emissive:0x051828, emissiveIntensity:0.3, roughness:0.1, metalness:0.8, transparent:true, opacity:0.92 });
-const seaMesh = new THREE.Mesh(seaGeo, seaMat);
-seaMesh.rotation.x = -Math.PI/2;
-scene.add(seaMesh);
-const seaPositions = seaGeo.attributes.position;
-const seaOriginZ = new Float32Array(seaPositions.count);
-for (let i=0;i<seaPositions.count;i++) seaOriginZ[i] = seaPositions.getY(i);
+// ── 위성 지형 평면 ──────────────────────────────
+// 초기 플레이스홀더 (모델 로드 후 위성 타일로 교체)
+const terrainGeo = new THREE.PlaneGeometry(3000, 3000, 1, 1);
+const terrainMat = new THREE.MeshStandardMaterial({
+  color: 0x1a3a2a, roughness: 1.0, metalness: 0.0
+});
+const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
+terrainMesh.rotation.x = -Math.PI / 2;
+scene.add(terrainMesh);
+
+// 청담대교 중심 좌표 (WGS84)
+const BRIDGE_LAT =  37.5183;
+const BRIDGE_LNG = 127.0654;
+
+// 위경도 → 타일 좌표 변환
+function lngLatToTile(lng, lat, zoom) {
+  const n = Math.pow(2, zoom);
+  const x = Math.floor((lng + 180) / 360 * n);
+  const latRad = lat * Math.PI / 180;
+  const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+  return { x, y, z: zoom };
+}
+
+// 위성 타일 로드 → Canvas 합성 → Three.js 텍스처
+async function loadSatelliteTerrain(modelSize) {
+  const ZOOM   = 16;   // 청담대교 zoom 16 = 약 2.4m/px
+  const MARGIN = 3;    // 교량 주변 타일 여유
+
+  const center = lngLatToTile(BRIDGE_LNG, BRIDGE_LAT, ZOOM);
+
+  // 타일 범위 계산 (모델 크기 기반)
+  // zoom 16: 1타일 = 256px = 약 611m (위도 37° 기준)
+  const mPerTile = 611;
+  const tilesNeeded = Math.ceil(Math.max(modelSize.x, modelSize.z) / mPerTile) + MARGIN;
+  const half = Math.ceil(tilesNeeded / 2);
+
+  const tileSize = 256;
+  const tilesX   = half * 2 + 1;
+  const tilesY   = half * 2 + 1;
+
+  const cvs = document.createElement('canvas');
+  cvs.width  = tilesX * tileSize;
+  cvs.height = tilesY * tileSize;
+  const ctx  = cvs.getContext('2d');
+  ctx.fillStyle = '#1a3a2a';
+  ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+  // 타일 병렬 로드
+  const promises = [];
+  for (let dy = -half; dy <= half; dy++) {
+    for (let dx = -half; dx <= half; dx++) {
+      const tx = center.x + dx;
+      const ty = center.y + dy;
+      // Google Maps 위성 타일 (무료, API키 불필요)
+      const url = `https://mt1.google.com/vt/lyrs=y&x=${tx}&y=${ty}&z=${ZOOM}`;
+      const px  = (dx + half) * tileSize;
+      const py  = (dy + half) * tileSize;
+      promises.push(
+        new Promise(resolve => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload  = () => { ctx.drawImage(img, px, py, tileSize, tileSize); resolve(); };
+          img.onerror = () => resolve();  // 실패해도 계속 진행
+          img.src = url;
+        })
+      );
+    }
+  }
+
+  await Promise.all(promises);
+
+  // Three.js 텍스처 적용
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  terrainMesh.material = new THREE.MeshStandardMaterial({
+    map:       tex,
+    roughness: 1.0,
+    metalness: 0.0,
+  });
+  terrainMesh.material.needsUpdate = true;
+
+  // 실제 지형 크기 = 타일 수 × mPerTile
+  const terrainW = tilesX * mPerTile;
+  const terrainH = tilesY * mPerTile;
+  terrainMesh.geometry.dispose();
+  terrainMesh.geometry = new THREE.PlaneGeometry(terrainW, terrainH, 1, 1);
+
+  console.log(`[지형] 위성 타일 로드 완료 (${tilesX}×${tilesY}타일, ${terrainW.toFixed(0)}×${terrainH.toFixed(0)}m)`);
+}
+// ─────────────────────────────────────────────────
 
 const bridgeGroup = new THREE.Group();
 scene.add(bridgeGroup);
@@ -915,7 +997,8 @@ loader.load(GLB_PATH,
     model.position.sub(center);
     bridgeGroup.add(model);
     panX = 0; panY = 0; panZ = 0;
-    seaMesh.position.y = -size.y/2 - 2;
+    // 지형 평면 위치: 모델 바닥보다 살짝 아래
+    terrainMesh.position.y = -size.y / 2 - 2;
     const maxDim = Math.max(size.x, size.y, size.z);
     radius = maxDim * 1.8;
     camera.far = maxDim*50; camera.near = maxDim*0.0005;
@@ -923,6 +1006,8 @@ loader.load(GLB_PATH,
     updateSensorScale(size);
     document.getElementById('loading-overlay').style.display = 'none';
     modelLoaded = true;
+    // 위성 타일 비동기 로드
+    loadSatelliteTerrain(size);
   },
   function(xhr) {
     if (xhr.lengthComputable) {
@@ -2254,8 +2339,7 @@ function animate() {
   camera.position.y=ty+Math.sin(phi)*radius;
   camera.position.z=tz+Math.cos(theta)*Math.cos(phi)*radius;
   camera.lookAt(tx,ty,tz);
-  for(let i=0;i<seaPositions.count;i++){const x=seaPositions.getX(i),z=seaPositions.getZ(i);seaPositions.setY(i,seaOriginZ[i]+Math.sin(x*0.015+t*0.6)*0.8+Math.sin(z*0.01+t*0.4)*0.6);}
-  seaPositions.needsUpdate=true; seaGeo.computeVertexNormals();
+  // 파도 애니메이션 제거 (위성 지형으로 교체됨)
   if(deformOn&&modelLoaded){const em=currentVal('EM_P39P40_01'),deform=(em/1000)*deformScale;bridgeGroup.position.y=deform*0.3*Math.sin(t*0.5);bridgeGroup.rotation.x=deform*0.005*Math.cos(t*0.4);}
   markerGroup.children.forEach(m=>{
     if(m.userData.isRing){m.scale.setScalar(1+Math.sin(t*2+m.position.x*0.1)*0.2);m.material.opacity=0.2+Math.sin(t*2+m.position.x*0.1)*0.15;}
