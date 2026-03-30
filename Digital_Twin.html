@@ -863,7 +863,7 @@ scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 0.8));
 
 // ── 위성 지형 평면 (Google Maps XYZ 타일 방식) ──
 // ※ YOUR_GOOGLE_MAPS_API_KEY 부분을 발급받은 API 키로 교체하세요
-const GOOGLE_MAPS_API_KEY = 'AIzaSyDNml8Uq9OMZdf_vfLCq-T5Pe6HMvHWu1s';
+const GOOGLE_MAPS_API_KEY = 'YOUR_GOOGLE_MAPS_API_KEY';
 
 // 청담대교 본선 구간 중심 좌표 (WGS84)
 const BRIDGE_LAT = 37.526977;
@@ -1008,11 +1008,10 @@ loader.load(GLB_PATH,
     bridgeGroup.add(model);
     panX = 0; panY = 0; panZ = 0;
     // 지형 평면 위치: 모델 바닥보다 살짝 아래
-    terrainMesh.position.y = -size.y / 2 - 2;
-    // 지형도 위치 오프셋: 실제 청담대교 좌표 기준 정렬
-    // 교량 슬래브 시작점(37.5315, 127.0667) 기준
-    terrainMesh.position.x = -186.2;
-    terrainMesh.position.z = -503.5;
+    terrainMesh.position.y = -13;
+    // 지형도 위치 오프셋: 실제 청담대교 좌표 기준 정렬 (직접 측정값)
+    terrainMesh.position.x = 43;
+    terrainMesh.position.z = 230;
     const maxDim = Math.max(size.x, size.y, size.z);
     radius = maxDim * 1.8;
     camera.far = maxDim*50; camera.near = maxDim*0.0005;
