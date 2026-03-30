@@ -861,12 +861,12 @@ fillLight.position.set(-100, 50, -100);
 scene.add(fillLight);
 scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 0.8));
 
-// ── 위성 지형 평면 (Google Maps Static API 격자 타일) ──
+// ── 위성 지형 평면 (Google Maps XYZ 타일 방식) ──
 // ※ YOUR_GOOGLE_MAPS_API_KEY 부분을 발급받은 API 키로 교체하세요
 const GOOGLE_MAPS_API_KEY = 'AIzaSyDNml8Uq9OMZdf_vfLCq-T5Pe6HMvHWu1s';
 
 // 청담대교 중심 좌표 (WGS84)
-const BRIDGE_LAT = 37.51836;   // 청담대교 교량 중심
+const BRIDGE_LAT = 37.51836;
 const BRIDGE_LNG = 127.06545;
 
 // 초기 플레이스홀더
@@ -878,58 +878,65 @@ const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
 terrainMesh.rotation.x = -Math.PI / 2;
 scene.add(terrainMesh);
 
-// 위경도 오프셋 계산 (미터 → 위경도 변환)
-function meterToLat(m) { return m / 111320; }
-function meterToLng(m, lat) { return m / (111320 * Math.cos(lat * Math.PI / 180)); }
+// 위경도 → XYZ 타일 번호 변환
+function latLngToTileXY(lat, lng, zoom) {
+  const n   = Math.pow(2, zoom);
+  const tileX = Math.floor((lng + 180) / 360 * n);
+  const latRad = lat * Math.PI / 180;
+  const tileY = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+  return { tileX, tileY };
+}
 
-// Google Maps Static API 격자 타일로 고화질 위성 이미지 로드
-// zoom 18 = 약 0.6m/px, 각 타일 640×640px × scale2 = 1280×1280px = 약 768m × 768m
+// XYZ 타일 번호 → 타일 좌상단 위경도
+function tileXYToLatLng(tileX, tileY, zoom) {
+  const n   = Math.pow(2, zoom);
+  const lng = tileX / n * 360 - 180;
+  const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * tileY / n)));
+  const lat = latRad * 180 / Math.PI;
+  return { lat, lng };
+}
+
+// Google Maps XYZ 타일로 고화질 위성 이미지 로드
 async function loadSatelliteTerrain(modelSize) {
-  const ZOOM    = 18;        // 고화질 zoom
-  const TILE_PX = 640;       // Static API 최대 크기
-  const SCALE   = 2;         // 2x 고해상도
+  const ZOOM     = 18;    // zoom 18 = 약 0.6m/px (위도 37°)
+  const TILE_PX  = 256;   // XYZ 타일 1장 = 256px
 
-  // zoom 18, 위도 37° 기준 1px당 미터
-  const MPX = 156543.03392 * Math.cos(BRIDGE_LAT * Math.PI / 180) / Math.pow(2, ZOOM);
-  // 타일 1장이 커버하는 실제 거리 (미터)
-  const TILE_M = TILE_PX * SCALE * MPX;
+  // zoom 18, 위도 37° 기준 1타일의 실제 거리 (미터)
+  const TILE_M = 2 * Math.PI * 6378137 * Math.cos(BRIDGE_LAT * Math.PI / 180) / Math.pow(2, ZOOM);
 
-  // 모델 크기 기준으로 필요한 격자 수 계산 (여유 1칸 추가)
-  const maxModelDim = Math.max(modelSize.x, modelSize.z);
-  const GRID = Math.ceil(maxModelDim / TILE_M) + 2;  // 홀수로 맞추기
-  const HALF = Math.floor(GRID / 2);
+  // 청담대교 중심 타일 번호
+  const center = latLngToTileXY(BRIDGE_LAT, BRIDGE_LNG, ZOOM);
 
-  const canvasW = GRID * TILE_PX * SCALE;
-  const canvasH = GRID * TILE_PX * SCALE;
+  // 모델 크기 기준 필요한 타일 수 (여유 2칸)
+  const maxDim = Math.max(modelSize.x, modelSize.z);
+  const HALF   = Math.ceil(maxDim / TILE_M / 2) + 2;
+  const COLS   = HALF * 2 + 1;
+  const ROWS   = HALF * 2 + 1;
+
+  // Canvas 생성 (타일 수 × 256px)
   const cvs = document.createElement('canvas');
-  cvs.width  = canvasW;
-  cvs.height = canvasH;
+  cvs.width  = COLS * TILE_PX;
+  cvs.height = ROWS * TILE_PX;
   const ctx  = cvs.getContext('2d');
-  ctx.fillStyle = '#1a3a2a';
-  ctx.fillRect(0, 0, canvasW, canvasH);
+  ctx.fillStyle = '#1a3a4a';
+  ctx.fillRect(0, 0, cvs.width, cvs.height);
 
-  // 각 격자 타일의 중심 좌표 계산 후 Static API 요청
+  // XYZ 타일 병렬 로드 → 정확한 격자 위치에 그리기
   const promises = [];
-  for (let row = -HALF; row <= HALF; row++) {
-    for (let col = -HALF; col <= HALF; col++) {
-      const tileLat = BRIDGE_LAT + meterToLat(row * TILE_M);
-      const tileLng = BRIDGE_LNG + meterToLng(col * TILE_M, BRIDGE_LAT);
-
-      const url = `https://maps.googleapis.com/maps/api/staticmap`
-        + `?center=${tileLat.toFixed(6)},${tileLng.toFixed(6)}`
-        + `&zoom=${ZOOM}`
-        + `&size=${TILE_PX}x${TILE_PX}`
-        + `&scale=${SCALE}`
-        + `&maptype=satellite`
-        + `&key=${GOOGLE_MAPS_API_KEY}`;
-
-      const px = (col + HALF) * TILE_PX * SCALE;
-      const py = (HALF - row) * TILE_PX * SCALE;   // row 방향 반전 (위→아래)
+  for (let dy = -HALF; dy <= HALF; dy++) {
+    for (let dx = -HALF; dx <= HALF; dx++) {
+      const tx  = center.tileX + dx;
+      const ty  = center.tileY + dy;
+      // Google Maps XYZ 타일 URL (API 키 필요)
+      const url = `https://maps.googleapis.com/maps/vt?lyrs=s,h&x=${tx}&y=${ty}&z=${ZOOM}&key=${GOOGLE_MAPS_API_KEY}`;
+      // Canvas 상의 픽셀 위치 (dx, dy → 좌→우, 위→아래)
+      const px  = (dx + HALF) * TILE_PX;
+      const py  = (dy + HALF) * TILE_PX;
 
       promises.push(new Promise(resolve => {
-        const img = new Image();
+        const img  = new Image();
         img.crossOrigin = 'anonymous';
-        img.onload  = () => { ctx.drawImage(img, px, py, TILE_PX * SCALE, TILE_PX * SCALE); resolve(); };
+        img.onload  = () => { ctx.drawImage(img, px, py, TILE_PX, TILE_PX); resolve(); };
         img.onerror = () => resolve();
         img.src = url;
       }));
@@ -946,13 +953,13 @@ async function loadSatelliteTerrain(modelSize) {
   });
   terrainMesh.material.needsUpdate = true;
 
-  // 전체 지형 크기
-  const totalW = GRID * TILE_M;
-  const totalH = GRID * TILE_M;
+  // 전체 지형 실제 크기 (미터)
+  const totalW = COLS * TILE_M;
+  const totalH = ROWS * TILE_M;
   terrainMesh.geometry.dispose();
   terrainMesh.geometry = new THREE.PlaneGeometry(totalW, totalH, 1, 1);
 
-  console.log(`[지형] Google Maps 격자 타일 로드 완료 (${GRID}×${GRID}, ${totalW.toFixed(0)}×${totalH.toFixed(0)}m, zoom ${ZOOM})`);
+  console.log(`[지형] XYZ 타일 완료 (${COLS}×${ROWS}장, ${totalW.toFixed(0)}×${totalH.toFixed(0)}m, zoom ${ZOOM})`);
 }
 // ──────────────────────────────────────────────────
 
