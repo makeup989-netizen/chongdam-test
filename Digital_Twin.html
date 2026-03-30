@@ -861,11 +861,15 @@ fillLight.position.set(-100, 50, -100);
 scene.add(fillLight);
 scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 0.8));
 
-// ── 위성 지형 평면 (Google Maps API) ────────────
+// ── 위성 지형 평면 (Google Maps Static API 격자 타일) ──
 // ※ YOUR_GOOGLE_MAPS_API_KEY 부분을 발급받은 API 키로 교체하세요
 const GOOGLE_MAPS_API_KEY = 'AIzaSyDNml8Uq9OMZdf_vfLCq-T5Pe6HMvHWu1s';
 
-// 초기 플레이스홀더 (모델 로드 후 위성 타일로 교체)
+// 청담대교 중심 좌표 (WGS84)
+const BRIDGE_LAT = 37.51836;   // 청담대교 교량 중심
+const BRIDGE_LNG = 127.06545;
+
+// 초기 플레이스홀더
 const terrainGeo = new THREE.PlaneGeometry(3000, 3000, 1, 1);
 const terrainMat = new THREE.MeshStandardMaterial({
   color: 0x1a3a2a, roughness: 1.0, metalness: 0.0
@@ -874,79 +878,83 @@ const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
 terrainMesh.rotation.x = -Math.PI / 2;
 scene.add(terrainMesh);
 
-// 청담대교 중심 좌표 (WGS84)
-const BRIDGE_LAT =  37.5183;
-const BRIDGE_LNG = 127.0654;
+// 위경도 오프셋 계산 (미터 → 위경도 변환)
+function meterToLat(m) { return m / 111320; }
+function meterToLng(m, lat) { return m / (111320 * Math.cos(lat * Math.PI / 180)); }
 
-// 위경도 → 타일 좌표 변환
-function lngLatToTile(lng, lat, zoom) {
-  const n = Math.pow(2, zoom);
-  const x = Math.floor((lng + 180) / 360 * n);
-  const latRad = lat * Math.PI / 180;
-  const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
-  return { x, y, z: zoom };
-}
-
-// Google Maps Static API로 고화질 위성 이미지 로드
+// Google Maps Static API 격자 타일로 고화질 위성 이미지 로드
+// zoom 18 = 약 0.6m/px, 각 타일 640×640px × scale2 = 1280×1280px = 약 768m × 768m
 async function loadSatelliteTerrain(modelSize) {
-  // zoom 17 = 약 1.2m/px (고화질)
-  const ZOOM = 17;
+  const ZOOM    = 18;        // 고화질 zoom
+  const TILE_PX = 640;       // Static API 최대 크기
+  const SCALE   = 2;         // 2x 고해상도
 
-  // zoom 17 기준 1픽셀당 미터 (위도 37° 기준)
-  const metersPerPx = 156543.03392 * Math.cos(BRIDGE_LAT * Math.PI / 180) / Math.pow(2, ZOOM);
+  // zoom 18, 위도 37° 기준 1px당 미터
+  const MPX = 156543.03392 * Math.cos(BRIDGE_LAT * Math.PI / 180) / Math.pow(2, ZOOM);
+  // 타일 1장이 커버하는 실제 거리 (미터)
+  const TILE_M = TILE_PX * SCALE * MPX;
 
-  // 모델보다 여유있게 지형 크기 설정 (모델 최대 크기 × 3배)
-  const terrainSize = Math.max(modelSize.x, modelSize.z) * 3;
+  // 모델 크기 기준으로 필요한 격자 수 계산 (여유 1칸 추가)
+  const maxModelDim = Math.max(modelSize.x, modelSize.z);
+  const GRID = Math.ceil(maxModelDim / TILE_M) + 2;  // 홀수로 맞추기
+  const HALF = Math.floor(GRID / 2);
 
-  // Google Maps Static API 이미지 크기 (최대 640×640, 비율 2x = 1280×1280)
-  const imgSize  = 640;
-  const scale    = 2;   // 2x = 실제 1280×1280px
-  const realSize = imgSize * scale * metersPerPx;
+  const canvasW = GRID * TILE_PX * SCALE;
+  const canvasH = GRID * TILE_PX * SCALE;
+  const cvs = document.createElement('canvas');
+  cvs.width  = canvasW;
+  cvs.height = canvasH;
+  const ctx  = cvs.getContext('2d');
+  ctx.fillStyle = '#1a3a2a';
+  ctx.fillRect(0, 0, canvasW, canvasH);
 
-  // Static API URL 생성 (satellite + roads 레이어)
-  const mapUrl = `https://maps.googleapis.com/maps/api/staticmap`
-    + `?center=${BRIDGE_LAT},${BRIDGE_LNG}`
-    + `&zoom=${ZOOM}`
-    + `&size=${imgSize}x${imgSize}`
-    + `&scale=${scale}`
-    + `&maptype=satellite`
-    + `&style=feature:all|element:labels|visibility:off`  // 라벨 숨김
-    + `&key=${GOOGLE_MAPS_API_KEY}`;
+  // 각 격자 타일의 중심 좌표 계산 후 Static API 요청
+  const promises = [];
+  for (let row = -HALF; row <= HALF; row++) {
+    for (let col = -HALF; col <= HALF; col++) {
+      const tileLat = BRIDGE_LAT + meterToLat(row * TILE_M);
+      const tileLng = BRIDGE_LNG + meterToLng(col * TILE_M, BRIDGE_LAT);
 
-  return new Promise(resolve => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      // Canvas에 그리기
-      const cvs = document.createElement('canvas');
-      cvs.width  = img.naturalWidth  || imgSize * scale;
-      cvs.height = img.naturalHeight || imgSize * scale;
-      const ctx  = cvs.getContext('2d');
-      ctx.drawImage(img, 0, 0);
+      const url = `https://maps.googleapis.com/maps/api/staticmap`
+        + `?center=${tileLat.toFixed(6)},${tileLng.toFixed(6)}`
+        + `&zoom=${ZOOM}`
+        + `&size=${TILE_PX}x${TILE_PX}`
+        + `&scale=${SCALE}`
+        + `&maptype=satellite`
+        + `&key=${GOOGLE_MAPS_API_KEY}`;
 
-      // Three.js 텍스처 적용
-      const tex = new THREE.CanvasTexture(cvs);
-      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-      terrainMesh.material = new THREE.MeshStandardMaterial({
-        map: tex, roughness: 1.0, metalness: 0.0,
-      });
-      terrainMesh.material.needsUpdate = true;
+      const px = (col + HALF) * TILE_PX * SCALE;
+      const py = (HALF - row) * TILE_PX * SCALE;   // row 방향 반전 (위→아래)
 
-      // 지형 평면 크기를 실제 크기로 조정
-      terrainMesh.geometry.dispose();
-      terrainMesh.geometry = new THREE.PlaneGeometry(realSize, realSize, 1, 1);
+      promises.push(new Promise(resolve => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload  = () => { ctx.drawImage(img, px, py, TILE_PX * SCALE, TILE_PX * SCALE); resolve(); };
+        img.onerror = () => resolve();
+        img.src = url;
+      }));
+    }
+  }
 
-      console.log(`[지형] Google Maps 위성 이미지 로드 완료 (${realSize.toFixed(0)}×${realSize.toFixed(0)}m, zoom ${ZOOM})`);
-      resolve();
-    };
-    img.onerror = () => {
-      console.warn('[지형] Google Maps 이미지 로드 실패 — API 키를 확인하세요');
-      resolve();
-    };
-    img.src = mapUrl;
+  await Promise.all(promises);
+
+  // Three.js 텍스처 적용
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  terrainMesh.material = new THREE.MeshStandardMaterial({
+    map: tex, roughness: 1.0, metalness: 0.0,
   });
+  terrainMesh.material.needsUpdate = true;
+
+  // 전체 지형 크기
+  const totalW = GRID * TILE_M;
+  const totalH = GRID * TILE_M;
+  terrainMesh.geometry.dispose();
+  terrainMesh.geometry = new THREE.PlaneGeometry(totalW, totalH, 1, 1);
+
+  console.log(`[지형] Google Maps 격자 타일 로드 완료 (${GRID}×${GRID}, ${totalW.toFixed(0)}×${totalH.toFixed(0)}m, zoom ${ZOOM})`);
 }
-// ─────────────────────────────────────────────────
+// ──────────────────────────────────────────────────
 
 const bridgeGroup = new THREE.Group();
 scene.add(bridgeGroup);
