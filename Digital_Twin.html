@@ -1,0 +1,2310 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>청담대교 Digital Twin — 센서 모니터링 (PC)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Noto+Sans+KR:wght@300;400;500&display=swap');
+
+  :root {
+    --bg:      #080C14;
+    --panel:   #0D1420;
+    --border:  #1A2640;
+    --accent:  #00E5CC;
+    --warn:    #F0A030;
+    --danger:  #E84040;
+    --safe:    #30C080;
+    --text:    #C8D8E8;
+    --textMut: #5A7A99;
+    --mono:    'IBM Plex Mono', monospace;
+    --sans:    'Noto Sans KR', sans-serif;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    height: 48px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  .header-left { display:flex; align-items:center; gap:14px; }
+  .logo-dot {
+    width:8px; height:8px; border-radius:50%;
+    background:var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.6;transform:scale(.85)} }
+  .logo-text { font-family:var(--mono); font-size:12px; color:var(--accent); letter-spacing:.12em; }
+  .logo-sub { font-size:11px; color:var(--textMut); letter-spacing:.06em; }
+  .header-right { display:flex; align-items:center; gap:20px; }
+  .status-badge {
+    display:flex; align-items:center; gap:6px;
+    padding:4px 10px; border-radius:20px;
+    border:1px solid var(--safe);
+    font-family:var(--mono); font-size:10px; color:var(--safe);
+  }
+  .status-dot { width:5px; height:5px; border-radius:50%; background:var(--safe); animation:pulse 1.5s ease-in-out infinite; }
+  .time-display { font-family:var(--mono); font-size:11px; color:var(--textMut); }
+
+  .main { display:flex; flex:1; overflow:hidden; }
+
+  #canvas-wrap { flex:1; position:relative; overflow:hidden; }
+  canvas { display:block; }
+
+  .overlay-controls {
+    position:absolute; top:14px; left:14px;
+    display:flex; flex-direction:column; gap:6px; z-index:5;
+  }
+  .ctrl-btn {
+    background:rgba(13,20,32,.85);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-family:var(--mono); font-size:10px;
+    padding:6px 12px; cursor:pointer;
+    border-radius:4px; letter-spacing:.05em;
+    transition: border-color .2s, color .2s;
+    backdrop-filter:blur(6px);
+  }
+  .ctrl-btn:hover, .ctrl-btn.active { border-color:var(--accent); color:var(--accent); }
+
+  #loading-overlay {
+    position:absolute; top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    background:rgba(13,20,32,.95);
+    border:1px solid var(--border);
+    border-radius:8px; padding:24px 36px;
+    font-family:var(--mono); font-size:12px;
+    color:var(--accent); letter-spacing:.08em;
+    z-index:10; text-align:center;
+  }
+  #loading-overlay .load-bar-wrap {
+    width:200px; height:3px; background:var(--border);
+    border-radius:2px; margin-top:12px; overflow:hidden;
+  }
+  #loading-bar { height:100%; width:0%; background:var(--accent); border-radius:2px; transition:width .3s; }
+  #load-progress { color:var(--textMut); font-size:10px; margin-top:6px; }
+
+  .legend {
+    position:absolute; bottom:14px; right:14px;
+    background:rgba(13,20,32,.85);
+    border:1px solid var(--border);
+    border-radius:6px; padding:10px 14px;
+    font-family:var(--mono); font-size:10px;
+    backdrop-filter:blur(6px);
+  }
+  .legend-title { color:var(--textMut); margin-bottom:8px; letter-spacing:.08em; }
+  .legend-item { display:flex; align-items:center; gap:8px; margin-bottom:5px; }
+  .legend-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+
+  .scale-display {
+    position:absolute; bottom:14px; left:14px;
+    background:rgba(13,20,32,.8);
+    border:1px solid var(--border);
+    border-radius:4px; padding:8px 12px;
+    font-family:var(--mono); font-size:10px;
+    color:var(--textMut); backdrop-filter:blur(6px);
+  }
+  .scale-display span { color:var(--accent); }
+
+  .deform-control {
+    position:absolute; top:14px; right:14px;
+    background:rgba(13,20,32,.85);
+    border:1px solid var(--border);
+    border-radius:6px; padding:10px 14px;
+    font-family:var(--mono); font-size:10px;
+    backdrop-filter:blur(6px); z-index:5; min-width:160px;
+  }
+  .deform-label { color:var(--textMut); margin-bottom:6px; }
+  .deform-label span { color:var(--accent); }
+  input[type=range] { width:100%; accent-color:var(--accent); height:3px; cursor:pointer; }
+
+  #graph-popup {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 480px;
+    min-width: 320px;
+    min-height: 300px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    z-index: 20;
+    display: none;
+    box-shadow: 0 20px 60px rgba(0,0,0,.6);
+    resize: both;
+    overflow: auto;
+    user-select: none;
+  }
+  #graph-popup.show { display: block; }
+  #graph-popup.dragging { opacity: 0.9; cursor: grabbing; }
+  .popup-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px;
+    cursor: grab;
+  }
+  .popup-header:active { cursor: grabbing; }
+  .popup-title { font-family:var(--mono); font-size:13px; color:var(--accent); }
+  .popup-close {
+    background:none; border:1px solid var(--border);
+    color:var(--textMut); cursor:pointer;
+    width:24px; height:24px; border-radius:4px;
+    font-size:14px; display:flex; align-items:center; justify-content:center;
+    transition: border-color .2s, color .2s;
+  }
+  .popup-close:hover { border-color:var(--danger); color:var(--danger); }
+  .period-btn {
+    flex:1; padding:4px 0; background:var(--border); border:1px solid var(--border);
+    color:var(--textMut); font-family:var(--mono); font-size:10px; cursor:pointer;
+    border-radius:3px; transition:all .15s;
+  }
+  .period-btn.active { background:var(--accent); border-color:var(--accent); color:#000; font-weight:500; }
+  .period-btn:hover:not(.active) { border-color:var(--accent); color:var(--accent); }
+  #graph-canvas { width:100%; height:180px; }
+  .popup-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:14px; }
+  .stat-box { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px 10px; }
+  .stat-label { font-family:var(--mono); font-size:9px; color:var(--textMut); margin-bottom:4px; }
+  .stat-val { font-family:var(--mono); font-size:14px; color:#fff; font-weight:500; }
+
+  .side-panel {
+    width:300px; flex-shrink:0;
+    border-left:1px solid var(--border);
+    background:var(--panel);
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .panel-tabs { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; }
+  .tab {
+    flex:1; padding:10px 0; text-align:center;
+    font-family:var(--mono); font-size:10px; letter-spacing:.08em;
+    color:var(--textMut); cursor:pointer;
+    border-bottom:2px solid transparent;
+    transition: color .2s, border-color .2s;
+  }
+  .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .panel-content { flex:1; overflow-y:auto; padding:12px; }
+  .panel-content::-webkit-scrollbar { width:4px; }
+  .panel-content::-webkit-scrollbar-track { background:transparent; }
+  .panel-content::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+  .sensor-section-title {
+    font-family:var(--mono); font-size:9px; letter-spacing:.12em;
+    color:var(--textMut); margin:10px 0 6px; text-transform:uppercase;
+  }
+  .sensor-card {
+    background:var(--bg); border:1px solid var(--border);
+    border-radius:6px; padding:10px; margin-bottom:6px;
+    cursor:pointer; transition: border-color .2s, background .2s;
+    position:relative; overflow:hidden;
+  }
+  .sensor-card::before {
+    content:''; position:absolute; left:0; top:0; bottom:0; width:3px;
+    background:var(--card-color, var(--accent));
+  }
+  .sensor-card:hover { border-color:var(--card-color, var(--accent)); background:#0A1018; }
+  .sensor-card.selected { border-color:var(--card-color, var(--accent)); background:#0A1018; }
+  .sc-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
+  .sc-id { font-family:var(--mono); font-size:10px; color:var(--text); }
+  .sc-status { font-family:var(--mono); font-size:9px; padding:2px 7px; border-radius:10px; border:1px solid currentColor; }
+  .sc-status.safe { color:var(--safe); }
+  .sc-status.warn { color:var(--warn); }
+  .sc-status.danger { color:var(--danger); }
+  .sc-val { font-family:var(--mono); font-size:18px; color:#fff; font-weight:500; }
+  .sc-unit { font-family:var(--mono); font-size:10px; color:var(--textMut); margin-left:4px; }
+  .sc-type { font-size:10px; color:var(--textMut); margin-top:2px; }
+  .mini-chart { height:28px; margin-top:7px; display:flex; align-items:flex-end; gap:2px; }
+  .mini-bar { flex:1; border-radius:2px 2px 0 0; min-height:3px; transition:height .5s ease; }
+
+  footer {
+    height:28px; border-top:1px solid var(--border);
+    background:var(--panel);
+    display:flex; align-items:center;
+    padding:0 16px; gap:20px;
+    font-family:var(--mono); font-size:9px;
+    color:var(--textMut); flex-shrink:0;
+  }
+  .footer-item { display:flex; align-items:center; gap:5px; }
+  .footer-dot { width:5px; height:5px; border-radius:50%; }
+
+  /* ── 외관조사망도 탭 버튼 (평소 숨김) ── */
+  #tab-inspection-btn { display: none; }
+
+  /* ── 전체화면 오버레이 ── */
+  #insp-fullscreen {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: var(--bg);
+    flex-direction: column;
+  }
+  #insp-fullscreen.show { display: flex; }
+
+  /* 오버레이 헤더 */
+  #insp-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 16px; height: 48px;
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  #insp-header .insp-title {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--accent); letter-spacing: .1em;
+  }
+  #insp-header .insp-member-name {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--textMut); letter-spacing: .06em;
+  }
+  #insp-close-btn {
+    margin-left: auto; padding: 5px 16px;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--textMut); font-family: var(--mono);
+    font-size: 10px; letter-spacing: .06em;
+    border-radius: 4px; cursor: pointer;
+    transition: border-color .2s, color .2s;
+  }
+  #insp-close-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+  /* 본문: 좌측 목록 | 중앙 캔버스 | 우측 이력 */
+  #insp-body { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+
+  /* 좌측 부재 목록 */
+  #insp-member-list {
+    width: 160px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--border);
+    overflow-y: auto; background: var(--panel);
+  }
+  #insp-member-list::-webkit-scrollbar { width: 3px; }
+  #insp-member-list::-webkit-scrollbar-thumb { background: var(--border); }
+  .insp-list-header {
+    padding: 8px 10px; font-family: var(--mono);
+    font-size: 9px; letter-spacing: .1em;
+    color: var(--textMut); border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .insp-member-btn {
+    display: block; width: 100%; text-align: left;
+    padding: 7px 10px 7px 13px; font-size: 11px;
+    font-family: var(--mono); color: var(--textMut);
+    background: transparent; border: none;
+    border-bottom: 1px solid var(--border);
+    border-left: 3px solid transparent;
+    cursor: pointer; letter-spacing: .04em; transition: all .15s;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .insp-member-btn:hover  { background: #0A1018; color: var(--text); }
+  .insp-member-btn.active { border-left-color: var(--accent); color: var(--accent); background: rgba(0,229,204,.06); }
+
+  /* 중앙 영역 */
+  #insp-center { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+  /* 툴바 */
+  #insp-toolbar {
+    flex-shrink: 0; display: flex; align-items: center;
+    flex-wrap: wrap; gap: 4px; padding: 6px 10px;
+    background: var(--panel); border-bottom: 1px solid var(--border);
+  }
+  .insp-tool-btn {
+    padding: 4px 10px; font-size: 10px;
+    background: transparent; color: var(--textMut);
+    border: 1px solid var(--border); border-radius: 3px;
+    cursor: pointer; font-family: var(--mono);
+    letter-spacing: .04em; white-space: nowrap; transition: all .15s;
+  }
+  .insp-tool-btn:hover  { border-color: var(--accent); color: var(--accent); }
+  .insp-tool-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(0,229,204,.08); }
+  .insp-sep { width: 1px; height: 16px; background: var(--border); margin: 0 3px; flex-shrink: 0; }
+  .insp-scale-input {
+    width: 58px; padding: 3px 5px;
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 3px;
+    font-size: 10px; font-family: var(--mono);
+  }
+
+  /* 캔버스 */
+  #insp-canvas-wrap {
+    position: relative; flex: 1 1 auto;
+    overflow: hidden; background: #080C14;
+    cursor: crosshair; min-height: 0;
+  }
+  #insp-img-canvas, #insp-draw-canvas {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  }
+  #insp-overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: var(--textMut); font-family: var(--mono);
+    font-size: 12px; gap: 10px; pointer-events: none; letter-spacing: .06em;
+  }
+
+  /* 우측 손상이력 */
+  #insp-history {
+    width: 280px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    border-left: 1px solid var(--border);
+    overflow: hidden; background: var(--panel);
+  }
+  #insp-history-header {
+    padding: 8px 12px; font-family: var(--mono);
+    font-size: 9px; letter-spacing: .1em;
+    color: var(--textMut); border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  #insp-summary {
+    display: flex; flex-wrap: wrap;
+    gap: 5px; padding: 8px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0; min-height: 44px;
+  }
+  .insp-sum-card { border-radius: 4px; padding: 4px 8px; font-family: var(--mono); font-size: 10px; min-width: 60px; }
+  #insp-table-wrap { flex: 1; overflow-y: auto; }
+  #insp-table-wrap::-webkit-scrollbar { width: 3px; }
+  #insp-table-wrap::-webkit-scrollbar-thumb { background: var(--border); }
+  #insp-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 10px; color: var(--text); }
+  #insp-table th {
+    padding: 5px 8px; text-align: left; color: var(--textMut);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--panel);
+    font-weight: 500; font-size: 9px; letter-spacing: .06em;
+  }
+  #insp-table td { padding: 4px 8px; border-bottom: 1px solid #0D1420; }
+  #insp-table tr:hover td { background: #0A1018; }
+  .insp-del-btn { background: none; border: none; color: #E8404044; cursor: pointer; font-size: 12px; transition: color .15s; padding: 0 2px; }
+  .insp-del-btn:hover { color: #E84040; }
+
+  /* ── 표 위치 설정 안내 오버레이 ── */
+  #insp-table-guide {
+    display: none;
+    position: absolute; inset: 0; z-index: 10;
+    cursor: crosshair;
+  }
+  #insp-table-guide.active { display: block; }
+  #insp-table-guide-msg {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,229,204,.15);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--mono); font-size: 11px; letter-spacing: .06em;
+    padding: 6px 16px; border-radius: 4px;
+    pointer-events: none; white-space: nowrap;
+  }
+  #insp-table-preview {
+    position: absolute; border: 2px dashed var(--accent);
+    background: rgba(0,229,204,.05);
+    pointer-events: none; display: none;
+  }
+
+  /* ── 수치 입력 모달 ── */
+  #insp-modal-overlay {
+    display: none;
+    position: fixed; inset: 0; z-index: 300;
+    background: rgba(0,0,0,.6);
+    align-items: center; justify-content: center;
+  }
+  #insp-modal-overlay.show { display: flex; }
+  #insp-modal {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    min-width: 320px;
+    max-width: 420px;
+    width: 90%;
+    font-family: var(--mono);
+  }
+  #insp-modal-title {
+    font-size: 12px; font-weight: 600;
+    letter-spacing: .08em; margin-bottom: 16px;
+  }
+  .insp-modal-field {
+    display: flex; align-items: center;
+    gap: 8px; margin-bottom: 10px;
+  }
+  .insp-modal-field label {
+    width: 48px; font-size: 11px;
+    color: var(--textMut); text-align: right; flex-shrink: 0;
+  }
+  .insp-modal-field input {
+    flex: 1; padding: 5px 8px;
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px;
+    font-size: 12px; font-family: var(--mono);
+  }
+  .insp-modal-field input:focus {
+    outline: none; border-color: var(--accent);
+  }
+  .insp-modal-field .insp-modal-unit {
+    width: 28px; font-size: 10px;
+    color: var(--textMut); flex-shrink: 0;
+  }
+  #insp-modal-result {
+    margin: 12px 0 16px;
+    padding: 8px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 11px; color: var(--accent);
+    letter-spacing: .06em; min-height: 32px;
+  }
+  .insp-modal-btns {
+    display: flex; gap: 8px; justify-content: flex-end;
+  }
+  .insp-modal-btn {
+    padding: 6px 16px; font-size: 11px;
+    border-radius: 4px; cursor: pointer;
+    font-family: var(--mono); letter-spacing: .04em;
+    transition: all .15s;
+  }
+  .insp-modal-btn-cancel {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--textMut);
+  }
+  .insp-modal-btn-cancel:hover { border-color: var(--danger); color: var(--danger); }
+  .insp-modal-btn-ok {
+    background: rgba(0,229,204,.12);
+    border: 1px solid var(--accent); color: var(--accent);
+  }
+  .insp-modal-btn-ok:hover { background: rgba(0,229,204,.22); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo-dot"></div>
+    <div>
+      <div class="logo-text">CHONGDAM BRIDGE · DIGITAL TWIN</div>
+      <div class="logo-sub">청담대교 계측 센서 실시간 모니터링</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-badge"><div class="status-dot"></div>LIVE</div>
+    <div class="time-display" id="time-display">--:--:--</div>
+  </div>
+</header>
+
+<div class="main">
+  <div id="canvas-wrap">
+    <canvas id="three-canvas"></canvas>
+    <div id="loading-overlay">
+      <div>모델 로딩 중...</div>
+      <div class="load-bar-wrap"><div id="loading-bar"></div></div>
+      <div id="load-progress">0%</div>
+    </div>
+    <div class="overlay-controls">
+      <button class="ctrl-btn active" onclick="setView('perspective')">3D VIEW</button>
+      <button class="ctrl-btn" onclick="setView('top')">TOP</button>
+      <button class="ctrl-btn" onclick="setView('side')">SIDE</button>
+      <button class="ctrl-btn" id="deform-toggle" onclick="toggleDeform()">DEFORM ON</button>
+    </div>
+    <div class="deform-control">
+      <div class="deform-label">변형 배율: <span id="scale-val">50</span>×</div>
+      <input type="range" id="scale-slider" min="1" max="200" value="50" oninput="updateScale(this.value)">
+    </div>
+    <div class="legend">
+      <div class="legend-title">상태평가 등급</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#2196F3"></div>A등급</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#4CAF50"></div>B등급</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#FFEB3B"></div>C등급</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#FF9800"></div>D등급</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#F44336"></div>E등급</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#888888"></div>미평가</div>
+    </div>
+    <div class="scale-display">배율 <span id="footer-scale">50</span>× 과장 표현 중</div>
+    <div id="graph-popup">
+      <div class="popup-header">
+        <div class="popup-title" id="popup-title">--</div>
+        <button class="popup-close" onclick="closePopup()">✕</button>
+      </div>
+      <div id="period-tabs" style="display:flex;gap:4px;margin-bottom:10px;">
+        <button class="period-btn active" onclick="setPeriod('10m')">10분</button>
+        <button class="period-btn" onclick="setPeriod('1h')">1시간</button>
+        <button class="period-btn" onclick="setPeriod('1d')">일</button>
+        <button class="period-btn" onclick="setPeriod('1mo')">월</button>
+        <button class="period-btn" onclick="setPeriod('1y')">연</button>
+      </div>
+      <canvas id="graph-canvas" height="180"></canvas>
+      <div class="popup-stats">
+        <div class="stat-box"><div class="stat-label">최신값</div><div class="stat-val" id="stat-cur">--</div></div>
+        <div class="stat-box"><div class="stat-label">최댓값</div><div class="stat-val" id="stat-max">--</div></div>
+        <div class="stat-box"><div class="stat-label">평균값</div><div class="stat-val" id="stat-avg">--</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="side-panel">
+    <div class="panel-tabs">
+      <div class="tab active" id="tab-btn-sensors"     onclick="switchTab(this,'sensors')">SENSORS</div>
+      <div class="tab"        id="tab-btn-info"        onclick="switchTab(this,'info')">INFO</div>
+      <div class="tab"        id="tab-inspection-btn"  onclick="switchTab(this,'inspection')">🔍 조사</div>
+    </div>
+    <div class="panel-content" id="tab-sensors"></div>
+    <div class="panel-content" id="tab-info" style="display:none">
+      <div class="sensor-section-title">프로젝트 정보</div>
+      <div class="sensor-card" style="--card-color:#7B5EA7">
+        <div class="sc-type" style="color:var(--text);line-height:1.7">
+          청담대교 계측 센서 모니터링<br>
+          Revit 2026 Add-in 연계<br><br>
+          <span style="color:var(--textMut)">데이터 주기:</span> 10분 간격<br>
+          <span style="color:var(--textMut)">센서 종류:</span> 5종 14채널<br>
+          <span style="color:var(--textMut)">모델:</span> Revit IFC → GLB 변환
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     수치 입력 모달
+══════════════════════════════════════════ -->
+<div id="insp-modal-overlay">
+  <div id="insp-modal">
+    <div id="insp-modal-title">손상 수치 입력</div>
+    <div id="insp-modal-fields"></div>
+    <div id="insp-modal-result">—</div>
+    <div class="insp-modal-btns">
+      <button class="insp-modal-btn insp-modal-btn-cancel" onclick="inspModalCancel()">취소</button>
+      <button class="insp-modal-btn insp-modal-btn-ok"     onclick="inspModalConfirm()">확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     외관조사망도 전체화면 오버레이
+══════════════════════════════════════════ -->
+<div id="insp-fullscreen">
+
+  <!-- 오버레이 헤더 -->
+  <div id="insp-header">
+    <div class="logo-dot"></div>
+    <div class="insp-title">VISUAL INSPECTION MAP</div>
+    <div class="insp-member-name" id="insp-member-name">—</div>
+    <button id="insp-close-btn" onclick="inspClose()">✕ CLOSE</button>
+  </div>
+
+  <!-- 본문 -->
+  <div id="insp-body">
+
+    <!-- 좌측: 부재 목록 -->
+    <div id="insp-member-list">
+      <div class="insp-list-header">MEMBER LIST</div>
+    </div>
+
+    <!-- 중앙: 툴바 + 캔버스 -->
+    <div id="insp-center">
+      <div id="insp-toolbar">
+        <button class="insp-tool-btn active" id="insp-mode-polygon"  onclick="inspSetMode('polygon')">꼭짓점</button>
+        <button class="insp-tool-btn"        id="insp-mode-freehand" onclick="inspSetMode('freehand')">자유형</button>
+        <div class="insp-sep"></div>
+        <div id="insp-type-btns" style="display:contents;"></div>
+        <div class="insp-sep"></div>
+        <span style="font-size:10px;color:var(--textMut);font-family:var(--mono);">1px=</span>
+        <input class="insp-scale-input" id="insp-scale" type="number"
+          value="0.01" min="0.0001" step="0.001"
+          title="1픽셀 = N 미터"
+          onchange="inspScaleChange(this.value)">
+        <span style="font-size:10px;color:var(--textMut);font-family:var(--mono);">m</span>
+        <div class="insp-sep"></div>
+        <button class="insp-tool-btn" onclick="inspUndo()" title="실행취소">↩ 실행취소</button>
+        <button class="insp-tool-btn" onclick="inspClearAll()" title="전체삭제">🗑 전체삭제</button>
+        <div class="insp-sep"></div>
+        <button class="insp-tool-btn" onclick="inspExportJSON()">💾 JSON</button>
+        <button class="insp-tool-btn" onclick="inspExportPNG()">🖼 PNG</button>
+        <button class="insp-tool-btn" onclick="inspExportCSV()">📊 CSV</button>
+        <div class="insp-sep"></div>
+        <button class="insp-tool-btn" id="insp-table-set-btn"
+          onclick="inspTableSetStart()"
+          title="손상물량표 영역을 클릭으로 지정합니다">📐 표 위치 설정</button>
+      </div>
+      <div id="insp-canvas-wrap">
+        <canvas id="insp-img-canvas"></canvas>
+        <canvas id="insp-draw-canvas"></canvas>
+        <div id="insp-overlay">
+          <div style="font-size:28px;">🗺️</div>
+          <div id="insp-overlay-msg">부재를 클릭하면 외관조사망도가 표시됩니다</div>
+        </div>
+        <!-- 표 위치 설정 안내 오버레이 -->
+        <div id="insp-table-guide">
+          <div id="insp-table-guide-msg">① 손상물량표 좌상단을 클릭하세요</div>
+          <div id="insp-table-preview"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 우측: 손상이력 -->
+    <div id="insp-history">
+      <div id="insp-history-header">DAMAGE HISTORY</div>
+      <div id="insp-summary"></div>
+      <div id="insp-table-wrap">
+        <table id="insp-table">
+          <thead>
+            <tr>
+              <th>No</th><th>손상유형</th><th>수량</th>
+              <th style="text-align:right;">면적/연장</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="insp-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="footer-item"><div class="footer-dot" style="background:var(--safe)"></div>정상 <span id="cnt-safe">0</span></div>
+  <div class="footer-item"><div class="footer-dot" style="background:var(--warn)"></div>주의 <span id="cnt-warn">0</span></div>
+  <div class="footer-item"><div class="footer-dot" style="background:var(--danger)"></div>경고 <span id="cnt-danger">0</span></div>
+  <div style="margin-left:auto;color:var(--textMut)">드래그: 회전 | Shift+드래그: 이동 | 휠: 줌 | Shift+휠: 상하이동 | 마커 클릭: 상세</div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+
+// PC 폴더 구조: PC/Digital_Twin.html, output/chongdam_bridge.glb
+// GLB 파일은 GitHub LFS에서 직접 로드 (Cloudflare Pages 25MB 제한 우회)
+const GLB_PATH = 'https://media.githubusercontent.com/media/makeup989-netizen/chongdam-glb/master/chongdam_bridge.glb';
+
+// 상태평가 등급별 색상
+const GRADE_COLORS = {
+  'a': 0x2196F3,
+  'b': 0x4CAF50,
+  'c': 0xFFEB3B,
+  'd': 0xFF9800,
+  'e': 0xF44336,
+};
+
+// 하이라이트 상태
+let highlightedMesh     = null;   // 현재 하이라이트된 mesh
+let highlightedOrigMat  = null;   // 원본 재질 객체 (clone 전)
+
+// 부재 하이라이트 적용
+function highlightMesh(mesh) {
+  clearHover();        // hover 재질 먼저 원복 (원본 재질 복원)
+  restoreHighlight();  // 이전 click 하이라이트 원복
+  if (!mesh || !mesh.material) return;
+
+  // clearHover/restoreHighlight 후 mesh.material이 원본 재질임을 보장
+  highlightedMesh    = mesh;
+  highlightedOrigMat = mesh.material;  // 원본 재질 참조 보존
+
+  const hlMat = mesh.material.clone();
+  hlMat.color.setHex(0xFFFFFF);
+  hlMat.emissive.setHex(0x00E5CC);
+  hlMat.emissiveIntensity = 0.9;
+  mesh.material = hlMat;
+}
+
+// 하이라이트 원복 — 원본 재질 객체 자체를 복원
+function restoreHighlight() {
+  if (!highlightedMesh || !highlightedOrigMat) return;
+  highlightedMesh.material = highlightedOrigMat;  // 원본 재질로 완전 교체
+  highlightedMesh    = null;
+  highlightedOrigMat = null;
+}
+
+// ── Hover 하이라이트 (마우스 올렸을 때) ──
+let hoveredMesh    = null;
+let hoveredOrigMat = null;   // 원본 재질 보존
+
+function hoverMesh(mesh) {
+  if (mesh === highlightedMesh) { clearHover(); return; }
+  if (mesh === hoveredMesh) return;
+  clearHover();
+  if (!mesh || !mesh.material) return;
+  hoveredMesh    = mesh;
+  hoveredOrigMat = mesh.material;  // 원본 재질 참조 보존
+  const hvMat = mesh.material.clone();
+  hvMat.color.setHex(0xDDFFFA);
+  hvMat.emissive.setHex(0x00E5CC);
+  hvMat.emissiveIntensity = 0.35;
+  mesh.material = hvMat;
+}
+
+function clearHover() {
+  if (!hoveredMesh || !hoveredOrigMat) return;
+  hoveredMesh.material = hoveredOrigMat;  // 조건 없이 항상 원본 재질로 복원
+  hoveredMesh    = null;
+  hoveredOrigMat = null;
+}
+// ─────────────────────────────────────────
+
+let memberGrades = {};
+async function loadMemberGrades() {
+  try {
+    const res = await fetch('./output/member_grades.json');
+    memberGrades = await res.json();
+    console.log(`[OK] member_grades.json 로드 완료: ${Object.keys(memberGrades).length}개 부재`);
+  } catch(e) {
+    console.warn('[WARN] member_grades.json 로드 실패', e);
+  }
+}
+loadMemberGrades();
+
+// GlobalId → code 매핑 테이블
+let memberCodes = {};
+async function loadMemberCodes() {
+  try {
+    const res = await fetch('./output/member_codes.json');
+    memberCodes = await res.json();
+    console.log(`[OK] member_codes.json 로드 완료: ${Object.keys(memberCodes).length}개 부재`);
+  } catch(e) {
+    console.warn('[WARN] member_codes.json 로드 실패 — 외관조사망도 연동 비활성화', e);
+  }
+}
+loadMemberCodes();
+
+const SENSORS = [
+  { id:'EM_P39P40_01',  type:'신축변위계', unit:'mm',  color:'#FF8250', pos:[8,    9,  -21.5], axis:'x',  range:[-5,5],    noLimit:true },
+  { id:'EM_P42P43_01',  type:'신축변위계', unit:'mm',  color:'#FF8250', pos:[-21.5,9,   59.8], axis:'x',  range:[-5,5],    noLimit:true },
+  { id:'EM_P37_01',     type:'신축변위계', unit:'mm',  color:'#FF8250', pos:[33.5, 9,  -91],   axis:'x',  range:[-5,5],    noLimit:true },
+  { id:'EM_P45_01',     type:'신축변위계', unit:'mm',  color:'#FF8250', pos:[-47.2,9,   130],  axis:'x',  range:[-5,5],    noLimit:true },
+  { id:'T_P40_01',      type:'경사계',    unit:'°',   color:'#50DCA0', pos:[2.5,  5,  -15.7], axis:'rz', range:[-1.5,1.5], noLimit:true },
+  { id:'T_P40_02',      type:'경사계',    unit:'°',   color:'#50DCA0', pos:[-0.5, 5,  -8],    axis:'rz', range:[-1.5,1.5], noLimit:true },
+  { id:'T_P42_01',      type:'경사계',    unit:'°',   color:'#50DCA0', pos:[-8.5, 5,   14.5], axis:'rz', range:[-1.5,1.5], noLimit:true },
+  { id:'T_P42_02',      type:'경사계',    unit:'°',   color:'#50DCA0', pos:[-11,  5,   22.2], axis:'rz', range:[-1.5,1.5], noLimit:true },
+  { id:'Temp_P39P40_01',type:'온도계',    unit:'℃',   color:'#FFC83C', pos:[3,    6,  -17.5], axis:'t',  range:[-10,50],   noLimit:true },
+  { id:'WG_WD',         type:'풍향',      unit:'°',   color:'#50AAFF', pos:[4.1,  9,  -10.8], axis:'w',  range:[0,360], noLimit:true },
+  { id:'WG_WS_A',       type:'풍속(평균)',unit:'m/s', color:'#50AAFF', pos:[5,    9,  -13.1], axis:'w',  range:[0,30],  noLimit:true },
+  { id:'WG_WS_M',       type:'풍속(최대)',unit:'m/s', color:'#50AAFF', pos:[3.2,  9,  -8.5],  axis:'w',  range:[0,40],  noLimit:true },
+  { id:'AC_P36P37_Z_01',type:'가속도계',  unit:'gal', color:'#C850FF', pos:[35.5, 9,  -97],   axis:'z',  range:[0,200], noLimit:true },
+  { id:'AC_P37P38_Z_01',type:'가속도계',  unit:'gal', color:'#C850FF', pos:[30,   9,  -82],   axis:'z',  range:[0,200], noLimit:true },
+];
+
+let csvData = null, csvLoading = false;
+async function loadCsvData() {
+  if (csvData || csvLoading) return;
+  csvLoading = true;
+  try {
+    const res = await fetch('./sensor_data.json');
+    csvData = await res.json();
+    renderPanel();
+  } catch(e) { console.warn('[WARN] sensor_data.json 로드 실패', e); }
+  csvLoading = false;
+}
+loadCsvData();
+
+let currentPeriod = '1d';
+
+function getSensorSeries(id, period) {
+  if (csvData && csvData[period] && csvData[period][id]) return csvData[period][id];
+  const s = SENSORS.find(x => x.id === id);
+  const vals = genData(s);
+  const now = Date.now();
+  const step = period==='10m'?600000:period==='1h'?3600000:period==='1d'?86400000:period==='1mo'?2592000000:31536000000;
+  return { ts: vals.map((_,i) => now-(vals.length-1-i)*step), val: vals };
+}
+
+function currentVal(id) {
+  const s = getSensorSeries(id, '1d');
+  return s.val.length ? s.val[s.val.length-1] : 0;
+}
+
+function getStatus(sensor) {
+  if (sensor.noLimit) return 'safe';
+  const v = currentVal(sensor.id), [lo,hi] = sensor.range;
+  const warn20 = (hi-lo)*0.15;
+  if (Math.abs(v-((lo+hi)/2)) > (hi-lo)/2-warn20*0.5) return 'danger';
+  if (Math.abs(v-((lo+hi)/2)) > (hi-lo)/2-warn20)     return 'warn';
+  return 'safe';
+}
+
+function genData(sensor) {
+  const [lo,hi] = sensor.range;
+  const mid=(lo+hi)/2, span=(hi-lo)*0.35;
+  return Array.from({length:48},(_,i)=>mid+(Math.random()-.5)*span+Math.sin(i*.3)*span*.3);
+}
+
+// Three.js
+const canvas = document.getElementById('three-canvas');
+const wrap   = document.getElementById('canvas-wrap');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(devicePixelRatio);
+renderer.setClearColor(0x0D1420, 1);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.5, 50000);
+camera.position.set(0, 800, 1500);
+camera.lookAt(0, 0, 0);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(100, 200, 100);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(2048, 2048);
+dirLight.shadow.camera.near = 1; dirLight.shadow.camera.far = 1000;
+dirLight.shadow.camera.left = -300; dirLight.shadow.camera.right = 300;
+dirLight.shadow.camera.top = 300; dirLight.shadow.camera.bottom = -300;
+scene.add(dirLight);
+const fillLight = new THREE.DirectionalLight(0x4488aa, 1.0);
+fillLight.position.set(-100, 50, -100);
+scene.add(fillLight);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 0.8));
+
+const seaGeo = new THREE.PlaneGeometry(2000, 2000, 80, 80);
+const seaMat = new THREE.MeshStandardMaterial({ color:0x0A3A5C, emissive:0x051828, emissiveIntensity:0.3, roughness:0.1, metalness:0.8, transparent:true, opacity:0.92 });
+const seaMesh = new THREE.Mesh(seaGeo, seaMat);
+seaMesh.rotation.x = -Math.PI/2;
+scene.add(seaMesh);
+const seaPositions = seaGeo.attributes.position;
+const seaOriginZ = new Float32Array(seaPositions.count);
+for (let i=0;i<seaPositions.count;i++) seaOriginZ[i] = seaPositions.getY(i);
+
+const bridgeGroup = new THREE.Group();
+scene.add(bridgeGroup);
+let modelLoaded = false, deckMesh = null;
+
+const loader = new THREE.GLTFLoader();
+
+loader.load(GLB_PATH,
+  function(gltf) {
+    const model = gltf.scene;
+    model.traverse(child => {
+      if (!child.isMesh) return;
+      child.castShadow = child.receiveShadow = true;
+
+      // 등급 색상 적용 (mesh 이름 = GlobalId)
+      const grade = memberGrades[child.name];
+      if (grade && GRADE_COLORS[grade]) {
+        child.material = new THREE.MeshStandardMaterial({
+          color: GRADE_COLORS[grade],
+          emissive: GRADE_COLORS[grade],
+          emissiveIntensity: 0.4,
+          roughness: 0.6,
+          metalness: 0.1,
+        });
+      } else {
+        child.material = new THREE.MeshStandardMaterial({
+          color: 0x888888,
+          roughness: 0.7,
+          metalness: 0.0,
+        });
+      }
+
+      if (!deckMesh) deckMesh = child;
+      else {
+        const cs = new THREE.Box3().setFromObject(child).getSize(new THREE.Vector3());
+        const bs = new THREE.Box3().setFromObject(deckMesh).getSize(new THREE.Vector3());
+        if (cs.x > bs.x) deckMesh = child;
+      }
+    });
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    console.log(`[모델] 크기: ${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)}`);
+    model.position.sub(center);
+    bridgeGroup.add(model);
+    panX = 0; panY = 0; panZ = 0;
+    seaMesh.position.y = -size.y/2 - 2;
+    const maxDim = Math.max(size.x, size.y, size.z);
+    radius = maxDim * 1.8;
+    camera.far = maxDim*50; camera.near = maxDim*0.0005;
+    camera.updateProjectionMatrix();
+    updateSensorScale(size);
+    document.getElementById('loading-overlay').style.display = 'none';
+    modelLoaded = true;
+  },
+  function(xhr) {
+    if (xhr.lengthComputable) {
+      const pct = Math.round(xhr.loaded/xhr.total*100);
+      document.getElementById('loading-bar').style.width = pct+'%';
+      document.getElementById('load-progress').textContent = `${pct}%  (${(xhr.loaded/1024/1024).toFixed(1)} / ${(xhr.total/1024/1024).toFixed(1)} MB)`;
+    }
+  },
+  function(error) {
+    document.getElementById('loading-overlay').innerHTML = `
+      <div style="color:#E84040;margin-bottom:8px">모델 로드 실패</div>
+      <div style="color:#5A7A99;font-size:10px">${error.message||String(error)}</div>
+      <div style="color:#5A7A99;font-size:10px;margin-top:6px">경로: ${GLB_PATH}</div>`;
+  }
+);
+
+const markerMeshes = {}, markerGroup = new THREE.Group();
+scene.add(markerGroup);
+
+// 상태별 색상
+const STATUS_COLORS = { safe: 0x30C080, warn: 0xF0A030, danger: 0xE84040 };
+const STATUS_HEX    = { safe: '#30C080', warn: '#F0A030', danger: '#E84040' };
+
+// Canvas 텍스트로 Sprite 라벨 생성
+function makeLabelSprite(text, color) {
+  const canvas2d = document.createElement('canvas');
+  canvas2d.width = 512; canvas2d.height = 128;
+  const ctx = canvas2d.getContext('2d');
+  ctx.clearRect(0, 0, 512, 128);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 36px IBM Plex Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 256, 64);
+  const tex = new THREE.CanvasTexture(canvas2d);
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(8, 2, 1);
+  sprite.userData.isLabel = true;
+  return sprite;
+}
+
+SENSORS.forEach(s => {
+  const status = getStatus(s);
+  const col = STATUS_COLORS[status];
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.8, 12, 12),
+    new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.7, metalness: 0.1, roughness: 0.3 })
+  );
+  mesh.position.set(...s.pos);
+  mesh.userData.sensorId = s.id;
+  markerGroup.add(mesh);
+  markerMeshes[s.id] = mesh;
+
+  // 펄스 링
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(1.0, 1.3, 16),
+    new THREE.MeshBasicMaterial({ color: col, side: THREE.DoubleSide, transparent: true, opacity: 0.5 })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.userData.isRing = true;
+  mesh.add(ring);
+
+  // Sprite 라벨
+  const sprite = makeLabelSprite(s.id, STATUS_HEX[status]);
+  sprite.position.set(0, 2.5, 0);
+  mesh.add(sprite);
+});
+
+function updateSensorScale(modelSize) {
+  const markerSize = Math.max(modelSize.x, modelSize.z)*0.015*0.25;
+  markerGroup.scale.setScalar(markerSize);
+  markerGroup.position.y = 0;
+}
+
+// 카메라 컨트롤
+let isDragging=false, prevX=0, prevY=0;
+let theta=-Math.PI/8, phi=Math.PI/3.5, radius=1200;
+let panX=0, panY=0, panZ=0;
+
+canvas.addEventListener('mousedown', e => { if(e.button===0){isDragging=true;prevX=e.clientX;prevY=e.clientY;} });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+window.addEventListener('mouseup', ()=>{ isDragging=false; });
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  const dx=(e.clientX-prevX)*0.005, dy=(e.clientY-prevY)*0.005;
+  if (e.shiftKey) {
+    const panSpeed=radius*0.001;
+    const rightX=Math.cos(theta), rightZ=-Math.sin(theta);
+    panX -= dx*panSpeed*rightX*100;
+    panZ -= dx*panSpeed*rightZ*100;
+    panY += dy*panSpeed*100;
+  } else {
+    theta -= dx;
+    phi = Math.max(0.1, Math.min(Math.PI/2.1, phi+dy));
+  }
+  prevX=e.clientX; prevY=e.clientY;
+});
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (e.shiftKey) panY -= e.deltaY*radius*0.0002;
+  else radius = Math.max(10, Math.min(5000, radius+e.deltaY*0.5));
+}, { passive:false });
+
+// 마우스 hover → 부재 하이라이트
+canvas.addEventListener('mousemove', e => {
+  if (isDragging || !modelLoaded || !bridgeGroup) { clearHover(); return; }
+  const rect  = canvas.getBoundingClientRect();
+  const mouse = new THREE.Vector2(
+    ((e.clientX - rect.left) / rect.width)  *  2 - 1,
+   -((e.clientY - rect.top)  / rect.height) *  2 + 1
+  );
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(mouse, camera);
+
+  // 센서 마커 위에 있으면 hover 해제
+  const markerHit = ray.intersectObjects(Object.values(markerMeshes));
+  if (markerHit.length) { clearHover(); canvas.style.cursor = 'pointer'; return; }
+
+  const meshes = [];
+  bridgeGroup.traverse(c => { if (c.isMesh) meshes.push(c); });
+  const hits = ray.intersectObjects(meshes);
+
+  if (hits.length) {
+    hoverMesh(hits[0].object);
+    canvas.style.cursor = 'pointer';
+  } else {
+    clearHover();
+    canvas.style.cursor = 'default';
+  }
+});
+
+// 캔버스 벗어나면 hover 해제
+canvas.addEventListener('mouseleave', () => { clearHover(); canvas.style.cursor = 'default'; });
+
+canvas.addEventListener('click', e => {
+  const rect=canvas.getBoundingClientRect();
+  const mouse=new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1,-((e.clientY-rect.top)/rect.height)*2+1);
+  const ray=new THREE.Raycaster();
+  ray.setFromCamera(mouse,camera);
+
+  // 센서 마커 클릭 우선
+  const markerHits = ray.intersectObjects(Object.values(markerMeshes));
+  if (markerHits.length) { openPopup(markerHits[0].object.userData.sensorId); return; }
+
+  closePopup();
+
+  // 브릿지 부재 클릭 → 하이라이트 + 외관조사망도 연동
+  if (modelLoaded && bridgeGroup) {
+    const meshes = [];
+    bridgeGroup.traverse(c => { if (c.isMesh) meshes.push(c); });
+    const bridgeHits = ray.intersectObjects(meshes);
+
+    if (bridgeHits.length) {
+      const hitMesh  = bridgeHits[0].object;
+      const globalId = hitMesh.name;
+      const code     = memberCodes[globalId] || '';
+
+      // 디버그: 콘솔에서 클릭된 부재 확인
+      console.log(`[클릭] GlobalId: ${globalId} → code: ${code || '(매핑없음)'}`);
+
+      // 하이라이트 적용 (code 매핑 여부와 무관하게 클릭된 부재 강조)
+      highlightMesh(hitMesh);
+
+      if (code) {
+        const found = inspOpenByMemberId(code);
+        if (!found) {
+          // 매핑은 있는 code지만 inspection_map에 없는 경우
+          console.log(`[조사망도] inspection_map에 code 없음: ${code}`);
+          restoreHighlight();
+        }
+      } else {
+        // member_codes.json에 GlobalId 없음 → 하이라이트만 잠깐 표시 후 복원
+        console.log(`[조사망도] member_codes에 GlobalId 없음: ${globalId}`);
+        setTimeout(restoreHighlight, 800);
+      }
+    } else {
+      // 빈 곳 클릭 → 하이라이트 해제
+      restoreHighlight();
+    }
+  }
+});
+
+function setView(v) {
+  document.querySelectorAll('.ctrl-btn').forEach(b=>b.classList.remove('active'));
+  event.target.classList.add('active');
+  if (v==='perspective') { theta=-Math.PI/8; phi=Math.PI/3.5; }
+  if (v==='top')         { theta=0; phi=Math.PI/2-0.01; }
+  if (v==='side')        { theta=Math.PI/2; phi=Math.PI/6; }
+}
+
+let deformOn=true, deformScale=50;
+function toggleDeform() {
+  deformOn=!deformOn;
+  document.getElementById('deform-toggle').textContent = deformOn?'DEFORM ON':'DEFORM OFF';
+  document.getElementById('deform-toggle').classList.toggle('active',deformOn);
+  if (!deformOn&&bridgeGroup) { bridgeGroup.position.y=0; bridgeGroup.rotation.x=0; }
+}
+function updateScale(v) {
+  deformScale=+v;
+  document.getElementById('scale-val').textContent=v;
+  document.getElementById('footer-scale').textContent=v;
+}
+
+let popupSensorId=null;
+function setPeriod(period) {
+  currentPeriod=period;
+  document.querySelectorAll('.period-btn').forEach(b=>{
+    b.classList.toggle('active', b.textContent==={'10m':'10분','1h':'1시간','1d':'일','1mo':'월','1y':'연'}[period]);
+  });
+  if (popupSensorId) drawGraphPopup(popupSensorId);
+}
+function openPopup(id) {
+  popupSensorId = id;
+  const sensor = SENSORS.find(s=>s.id===id);
+  document.getElementById('popup-title').textContent = id + ' — ' + sensor.type;
+  const popup = document.getElementById('graph-popup');
+  if (!popup.dataset.positioned) {
+    popup.style.left = '50%';
+    popup.style.top  = '50%';
+    popup.style.transform = 'translate(-50%, -50%)';
+  }
+  popup.classList.add('show');
+  drawGraphPopup(id);
+  document.querySelectorAll('.sensor-card').forEach(c=>c.classList.remove('selected'));
+  const card = document.querySelector(`[data-sensor-id="${id}"]`);
+  if (card) { card.classList.add('selected'); card.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+}
+function closePopup() {
+  document.getElementById('graph-popup').classList.remove('show');
+  document.querySelectorAll('.sensor-card').forEach(c=>c.classList.remove('selected'));
+  popupSensorId = null;
+}
+
+// 팝업 드래그 이동
+(function() {
+  const popup  = document.getElementById('graph-popup');
+  const header = document.querySelector('.popup-header');
+  let dragging = false, startX, startY, origLeft, origTop;
+
+  header.addEventListener('mousedown', e => {
+    if (e.target.classList.contains('popup-close')) return;
+    dragging = true;
+    const rect = popup.getBoundingClientRect();
+    const wrapRect = document.getElementById('canvas-wrap').getBoundingClientRect();
+    popup.style.left = (rect.left - wrapRect.left) + 'px';
+    popup.style.top  = (rect.top  - wrapRect.top)  + 'px';
+    popup.style.transform = 'none';
+    popup.dataset.positioned = 'true';
+    startX   = e.clientX;
+    startY   = e.clientY;
+    origLeft = parseFloat(popup.style.left);
+    origTop  = parseFloat(popup.style.top);
+    popup.classList.add('dragging');
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    popup.style.left = (origLeft + e.clientX - startX) + 'px';
+    popup.style.top  = (origTop  + e.clientY - startY) + 'px';
+  });
+
+  window.addEventListener('mouseup', () => {
+    dragging = false;
+    popup.classList.remove('dragging');
+  });
+})();
+function drawGraphPopup(id) {
+  const sensor=SENSORS.find(s=>s.id===id);
+  const series=getSensorSeries(id,currentPeriod);
+  const data=series.val, ts=series.ts;
+  if (!data.length) return;
+  const cur=data[data.length-1], mx=Math.max(...data), avg=data.reduce((a,b)=>a+b,0)/data.length;
+  document.getElementById('stat-cur').textContent=cur.toFixed(2)+' '+sensor.unit;
+  document.getElementById('stat-max').textContent=mx.toFixed(2)+' '+sensor.unit;
+  document.getElementById('stat-avg').textContent=avg.toFixed(2)+' '+sensor.unit;
+  const gc=document.getElementById('graph-canvas'), ctx=gc.getContext('2d');
+  gc.width=gc.offsetWidth||440; gc.height=180;
+  const W=gc.width,H=gc.height,pad=40;
+  ctx.clearRect(0,0,W,H);
+  const mn=Math.min(...data),rng=mx-mn||1;
+  const toX=i=>pad+(W-pad*2)*i/(data.length-1);
+  const toY=v=>H-pad-(H-pad*2)*(v-mn)/rng;
+  ctx.strokeStyle='#1A2640'; ctx.lineWidth=0.5;
+  for(let i=0;i<5;i++){const y=pad+(H-pad*2)*i/4;ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(W-pad,y);ctx.stroke();ctx.fillStyle='#5A7A99';ctx.font='9px IBM Plex Mono';ctx.fillText((mn+rng*(1-i/4)).toFixed(1),2,y+3);}
+  ctx.setLineDash([4,3]); ctx.strokeStyle='#E84040'; ctx.lineWidth=0.8;
+  if(sensor.range[1]>=mn&&sensor.range[1]<=mx){ctx.beginPath();ctx.moveTo(pad,toY(sensor.range[1]));ctx.lineTo(W-pad,toY(sensor.range[1]));ctx.stroke();}
+  ctx.setLineDash([]);
+  const grad=ctx.createLinearGradient(0,0,0,H);grad.addColorStop(0,sensor.color+'50');grad.addColorStop(1,sensor.color+'05');
+  ctx.beginPath();ctx.moveTo(toX(0),toY(data[0]));data.forEach((_,i)=>{if(i>0)ctx.lineTo(toX(i),toY(data[i]));});ctx.lineTo(toX(data.length-1),H-pad);ctx.lineTo(toX(0),H-pad);ctx.closePath();ctx.fillStyle=grad;ctx.fill();
+  ctx.beginPath();ctx.moveTo(toX(0),toY(data[0]));data.forEach((_,i)=>{if(i>0)ctx.lineTo(toX(i),toY(data[i]));});ctx.strokeStyle=sensor.color;ctx.lineWidth=1.5;ctx.stroke();
+  ctx.beginPath();ctx.arc(toX(data.length-1),toY(data[data.length-1]),4,0,Math.PI*2);ctx.fillStyle=sensor.color;ctx.fill();
+  ctx.fillStyle='#5A7A99'; ctx.font='9px IBM Plex Mono';
+  if(ts.length){
+    const fmt=ms=>{const d=new Date(ms);if(currentPeriod==='10m'||currentPeriod==='1h')return d.toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});if(currentPeriod==='1d'||currentPeriod==='1mo')return d.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'});return d.getFullYear()+'년';};
+    ctx.fillText(fmt(ts[0]),pad-4,H-6);
+    ctx.fillText(fmt(ts[ts.length-1]),toX(data.length-1)-20,H-6);
+  }
+}
+
+const typeGroups = {
+  '신축변위계':SENSORS.filter(s=>s.type==='신축변위계'),
+  '경사계':    SENSORS.filter(s=>s.type==='경사계'),
+  '온도계':    SENSORS.filter(s=>s.type==='온도계'),
+  '풍향풍속':  SENSORS.filter(s=>s.id.startsWith('WG_')),
+  '가속도계':  SENSORS.filter(s=>s.type==='가속도계'),
+};
+
+function renderPanel() {
+  const cont=document.getElementById('tab-sensors');
+  cont.innerHTML='';
+  let safe=0,warn=0,danger=0;
+  Object.entries(typeGroups).forEach(([name,sensors])=>{
+    const title=document.createElement('div');title.className='sensor-section-title';title.textContent=name;cont.appendChild(title);
+    sensors.forEach(s=>{
+      const val=currentVal(s.id),status=getStatus(s);
+      if(status==='safe')safe++;else if(status==='warn')warn++;else danger++;
+      const card=document.createElement('div');card.className='sensor-card';card.style.setProperty('--card-color',s.color);card.dataset.sensorId=s.id;
+      const statusLabel=status==='safe'?'정상':status==='warn'?'주의':'경고';
+      const bars=(()=>{const series=getSensorSeries(s.id,'1d');const slice=series.val.slice(-12);if(!slice.length)return'';return slice.map(v=>{const pct=Math.max(3,((v-s.range[0])/(s.range[1]-s.range[0]))*100);return`<div class="mini-bar" style="height:${pct}%;background:${s.color}40;border-top:1px solid ${s.color}80"></div>`;}).join('');})();
+      card.innerHTML=`<div class="sc-top"><span class="sc-id">${s.id}</span><span class="sc-status ${status}">${statusLabel}</span></div><div><span class="sc-val">${val.toFixed(2)}</span><span class="sc-unit">${s.unit}</span></div><div class="sc-type">${s.type}</div><div class="mini-chart">${bars}</div>`;
+      card.onclick=()=>openPopup(s.id);cont.appendChild(card);
+    });
+  });
+  document.getElementById('cnt-safe').textContent=safe;
+  document.getElementById('cnt-warn').textContent=warn;
+  document.getElementById('cnt-danger').textContent=danger;
+}
+
+function switchTab(el, tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-sensors').style.display = tab === 'sensors' ? 'block' : 'none';
+  document.getElementById('tab-info').style.display    = tab === 'info'    ? 'block' : 'none';
+  // 조사 탭 클릭 → 전체화면 오픈
+  if (tab === 'inspection') inspOpen();
+}
+
+/* ══════════════════════════════════════════════════════
+   외관조사망도 모듈
+══════════════════════════════════════════════════════ */
+const INSP_BASE    = './inspection/';
+const INSP_DAMAGE_TYPES = [
+  { id:'crack',    label:'균열',     color:'#E24B4A', mode:'polyline', unit:'m',
+    fields: [
+      { key:'length', label:'길이', unit:'m',  placeholder:'0.00' },
+      { key:'width',  label:'폭',   unit:'mm', placeholder:'0.0'  },
+      { key:'count',  label:'개소', unit:'개', placeholder:'1'    },
+    ]
+  },
+  { id:'spalling', label:'박리/박락', color:'#EF9F27', mode:'polygon',  unit:'m²',
+    fields: [
+      { key:'length', label:'길이', unit:'m',  placeholder:'0.00' },
+      { key:'width',  label:'너비', unit:'m',  placeholder:'0.00' },
+      { key:'count',  label:'개소', unit:'개', placeholder:'1'    },
+    ]
+  },
+  { id:'leakage',  label:'누수/백태', color:'#378ADD', mode:'polygon',  unit:'m²',
+    fields: [
+      { key:'length', label:'길이', unit:'m',  placeholder:'0.00' },
+      { key:'width',  label:'너비', unit:'m',  placeholder:'0.00' },
+      { key:'count',  label:'개소', unit:'개', placeholder:'1'    },
+    ]
+  },
+  { id:'rebar',    label:'철근노출',  color:'#1D9E75', mode:'polygon',  unit:'m²',
+    fields: [
+      { key:'length', label:'길이', unit:'m',  placeholder:'0.00' },
+      { key:'width',  label:'너비', unit:'m',  placeholder:'0.00' },
+      { key:'count',  label:'개소', unit:'개', placeholder:'1'    },
+    ]
+  },
+  { id:'other',    label:'기타',      color:'#7F77DD', mode:'polygon',  unit:'m²',
+    fields: [
+      { key:'qty',   label:'수량', unit:'개', placeholder:'1'    },
+      { key:'count', label:'개소', unit:'개', placeholder:'1'    },
+    ]
+  },
+];
+
+let inspMapData      = [];     // inspection_map.json
+let inspDamages      = {};     // { imageFile: [{id,type,pts,area,length},...] }
+let inspCurrentEntry = null;   // 현재 표시 중인 매핑 엔트리
+let inspScaleM       = 0.01;
+let inspNextId       = 1;
+let inspDrawMode     = 'polygon';
+let inspDrawType     = INSP_DAMAGE_TYPES[0];
+let inspDrawing      = false;
+let inspCurrentPts   = [];
+let inspFreehandPts  = [];
+let inspLastTap      = 0;
+let inspImgEl        = null;
+let inspImgDrawRect  = null;
+
+/* 매핑 JSON 로드 */
+async function inspLoadMap() {
+  try {
+    const res  = await fetch(INSP_BASE + 'inspection_map.json?_=' + Date.now());
+    inspMapData = await res.json();
+    console.log(`[외관조사망도] 매핑 ${inspMapData.length}건 로드`);
+  } catch(e) {
+    console.warn('[외관조사망도] inspection_map.json 로드 실패', e);
+  }
+}
+inspLoadMap();
+
+/* 부재 ID로 매핑 엔트리 검색 */
+function inspFindEntry(memberId) {
+  // 매칭 규칙:
+  //   1. 완전 일치: "77_PI_P37_0_0_0_0" === "77_PI_P37_0_0_0_0"
+  //   2. prefix 일치: code("77_PI_P37_0_0") 로 시작하면 매칭
+  //      → inspection_map의 "77_PI_P37_0_0_0_0".startsWith("77_PI_P37_0_0") ✅
+  //   3. 역방향 prefix: memberId가 id로 시작해도 매칭
+  return inspMapData.find(e =>
+    e.memberIds && e.memberIds.some(id =>
+      id === memberId          // 완전 일치
+      || id.startsWith(memberId)    // json ID가 code보다 길 때 (json: _0_0_0_0 / code: _0_0)
+      || memberId.startsWith(id)    // code가 json ID보다 길 때 (반대 경우 대비)
+    )
+  ) || null;
+}
+
+/* 3D 부재 클릭 시 외부에서 호출 */
+function inspOpenByMemberId(memberId) {
+  const entry = inspFindEntry(memberId);
+  if (!entry) return false;
+  // 탭 버튼 표시
+  const tabBtn = document.getElementById('tab-inspection-btn');
+  tabBtn.style.display = 'flex';
+  // 전체화면 오픈 + 이미지 로드
+  inspOpen(entry);
+  return true;
+}
+
+/* 전체화면 오픈 */
+function inspOpen(entry) {
+  const fs = document.getElementById('insp-fullscreen');
+  fs.classList.add('show');
+
+  // 오픈 시 hover 정리 (3D 캔버스가 덮이면서 mouseleave 미발생)
+  clearHover();
+
+  // 전체화면 렌더링 완료 후 캔버스 크기 확정 → 이미지 로드
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      inspSyncSize();
+      if (entry) inspSelectEntry(entry);
+      else if (inspCurrentEntry) { inspSyncSize(); inspRedraw(); }
+    });
+  });
+}
+
+/* 전체화면 닫기 → Digital Twin 복귀 */
+function inspClose() {
+  document.getElementById('insp-fullscreen').classList.remove('show');
+  // 조사 탭 버튼 비활성화
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-btn-sensors').classList.add('active');
+  document.getElementById('tab-sensors').style.display = 'block';
+  document.getElementById('tab-info').style.display    = 'none';
+  // 3D 하이라이트 + hover 모두 원복
+  restoreHighlight();
+  clearHover();
+}
+
+/* 엔트리 선택 → 이미지 로드 */
+function inspSelectEntry(entry) {
+  inspCurrentEntry = entry;
+
+  // 부재 목록 표시
+  const memberList = document.getElementById('insp-member-list');
+  memberList.innerHTML = '';
+  // 같은 이미지를 공유하는 부재들 표시
+  const btn = document.createElement('span');
+  btn.className = 'insp-member-btn active';
+  btn.textContent = entry.label || entry.imageFile;
+  memberList.appendChild(btn);
+
+  // 이미지 로드
+  const imgCanvas = document.getElementById('insp-img-canvas');
+  const overlay   = document.getElementById('insp-overlay');
+  const msgEl     = document.getElementById('insp-overlay-msg');
+  overlay.style.display = 'flex';
+  msgEl.textContent = '이미지 로딩 중...';
+
+  const img = new Image();
+  img.onload = () => {
+    inspImgEl = img;
+    overlay.style.display = 'none';
+    // 레이아웃 확정 후 캔버스 크기 재측정 → 이미지가 항상 전체 영역에 꽉 차게
+    requestAnimationFrame(() => {
+      inspSyncSize();
+      inspDrawImg();
+      inspRedraw();
+      inspRenderHistory();
+    });
+  };
+  img.onerror = () => {
+    msgEl.textContent = `이미지를 불러올 수 없습니다: ${entry.imageFile}`;
+  };
+  img.src = INSP_BASE + encodeURIComponent(entry.imageFile) + '?_=' + Date.now();
+}
+
+/* 캔버스 크기 동기화 — DPR 적용으로 고해상도 렌더링 */
+const INSP_DPR = Math.min(window.devicePixelRatio || 1, 3);
+
+function inspSyncSize() {
+  const wrap = document.getElementById('insp-canvas-wrap');
+  const w = wrap.clientWidth  || 280;
+  const h = wrap.clientHeight || 300;
+  ['insp-img-canvas', 'insp-draw-canvas'].forEach(id => {
+    const c = document.getElementById(id);
+    c.width  = Math.round(w * INSP_DPR);
+    c.height = Math.round(h * INSP_DPR);
+    c.style.width  = w + 'px';
+    c.style.height = h + 'px';
+  });
+  if (inspImgEl) { inspDrawImg(); inspRedraw(); }
+}
+
+/* 이미지 그리기 — imageSmoothingQuality high로 선명도 최대화 */
+function inspDrawImg() {
+  if (!inspImgEl) return;
+  const c   = document.getElementById('insp-img-canvas');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  const sc = Math.min(W / inspImgEl.naturalWidth, H / inspImgEl.naturalHeight);
+  const dw = inspImgEl.naturalWidth  * sc;
+  const dh = inspImgEl.naturalHeight * sc;
+  const dx = (W - dw) / 2;
+  const dy = (H - dh) / 2;
+  inspImgDrawRect = { dx, dy, dw, dh, sc };
+  ctx.drawImage(inspImgEl, dx, dy, dw, dh);
+}
+
+/* 좌표 */
+/* 클릭 좌표 → 캔버스 내부 좌표 (DPR 배율 적용) */
+function inspPt(e) {
+  const r = document.getElementById('insp-draw-canvas').getBoundingClientRect();
+  return {
+    x: (e.clientX - r.left) * INSP_DPR,
+    y: (e.clientY - r.top)  * INSP_DPR
+  };
+}
+function inspPtT(e) {
+  const r = document.getElementById('insp-draw-canvas').getBoundingClientRect();
+  const t = e.touches[0] || e.changedTouches[0];
+  return {
+    x: (t.clientX - r.left) * INSP_DPR,
+    y: (t.clientY - r.top)  * INSP_DPR
+  };
+}
+
+/* 이벤트 바인딩 (DOM 준비 후 1회 실행) */
+function inspBindEvents() {
+  const dc = document.getElementById('insp-draw-canvas');
+
+  // 마우스 — 꼭짓점
+  dc.addEventListener('mousedown', e => {
+    if (!inspImgEl || inspDrawMode !== 'polygon') return;
+    if (e.button !== 0) return;  // 좌클릭만 점 추가
+    e.stopPropagation();
+    const p = inspPt(e);
+    if (!inspDrawing) { inspDrawing = true; inspCurrentPts = [p]; }
+    else              { inspCurrentPts.push(p); }
+    inspRedraw();
+  });
+  dc.addEventListener('mousemove', e => {
+    if (inspDrawing && inspDrawMode === 'polygon') inspRedrawPreview(inspPt(e));
+  });
+  dc.addEventListener('dblclick', e => {
+    e.preventDefault();
+    if (inspDrawing && inspDrawMode === 'polygon') inspFinish();
+  });
+  dc.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    // 우클릭 완료 — 마우스 현재 위치 무시, 마지막 클릭 점까지만 사용
+    if (inspDrawing && inspDrawMode === 'polygon') inspFinish();
+  });
+
+  // ESC → 현재 그리던 것 취소
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const fs = document.getElementById('insp-fullscreen');
+    if (!fs || !fs.classList.contains('show')) return;
+    // 모달 열려있으면 모달 닫기
+    const modal = document.getElementById('insp-modal-overlay');
+    if (modal && modal.classList.contains('show')) { inspModalCancel(); return; }
+    // 그리는 중이면 취소
+    if (inspDrawing) { inspResetDraw(); inspRedraw(); }
+  });
+
+  // 마우스 — 프리핸드
+  dc.addEventListener('mousedown', e => {
+    if (!inspImgEl || inspDrawMode !== 'freehand') return;
+    e.stopPropagation();
+    inspDrawing = true; inspFreehandPts = [inspPt(e)];
+  });
+  dc.addEventListener('mousemove', e => {
+    if (!inspDrawing || inspDrawMode !== 'freehand') return;
+    inspFreehandPts.push(inspPt(e));
+    inspRedrawPreview(null);
+  });
+  dc.addEventListener('mouseup', () => {
+    if (inspDrawing && inspDrawMode === 'freehand') inspFinish();
+  });
+
+  // 터치
+  dc.addEventListener('touchstart', e => {
+    if (!inspImgEl) return;
+    e.preventDefault(); e.stopPropagation();
+    const p = inspPtT(e);
+    if (inspDrawMode === 'polygon') {
+      if (!inspDrawing) { inspDrawing = true; inspCurrentPts = [p]; }
+      else              { inspCurrentPts.push(p); }
+      const now = Date.now();
+      if (now - inspLastTap < 300) inspFinish();
+      inspLastTap = now;
+      inspRedraw();
+    } else {
+      inspDrawing = true; inspFreehandPts = [p];
+    }
+  }, { passive: false });
+  dc.addEventListener('touchmove', e => {
+    if (!inspDrawing) return;
+    e.preventDefault();
+    const p = inspPtT(e);
+    if (inspDrawMode === 'freehand') { inspFreehandPts.push(p); inspRedrawPreview(null); }
+    else { inspRedrawPreview(p); }
+  }, { passive: false });
+  dc.addEventListener('touchend', () => {
+    if (inspDrawing && inspDrawMode === 'freehand') inspFinish();
+  });
+
+  // 캔버스 리사이즈
+  new ResizeObserver(() => inspSyncSize())
+    .observe(document.getElementById('insp-canvas-wrap'));
+}
+
+/* 드로잉 완료 → 수치 입력 모달 오픈 */
+let _inspPendingPts = null;  // 모달 확인 전 임시 보관
+
+function inspFinish() {
+  if (!inspCurrentEntry) return;
+  const pts = inspDrawMode === 'freehand' ? [...inspFreehandPts] : [...inspCurrentPts];
+  inspResetDraw();
+  inspRedraw();
+  if (pts.length < 2) return;
+  _inspPendingPts = pts;
+  inspModalOpen(inspDrawType);
+}
+function inspResetDraw() {
+  inspDrawing = false; inspCurrentPts = []; inspFreehandPts = [];
+}
+
+/* ── 수치 입력 모달 ── */
+function inspModalOpen(damageType, withoutDraw) {
+  // withoutDraw: 손상유형 버튼 직접 클릭 시 true
+  if (withoutDraw) _inspPendingPts = [];
+  const overlay = document.getElementById('insp-modal-overlay');
+  const titleEl = document.getElementById('insp-modal-title');
+  const fieldsEl = document.getElementById('insp-modal-fields');
+  const resultEl = document.getElementById('insp-modal-result');
+
+  titleEl.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${damageType.color};margin-right:6px;vertical-align:middle;"></span>${damageType.label} — 수치 입력`;
+  fieldsEl.innerHTML = '';
+
+  damageType.fields.forEach(f => {
+    const row = document.createElement('div');
+    row.className = 'insp-modal-field';
+    row.innerHTML = `
+      <label>${f.label}</label>
+      <input type="number" id="insp-f-${f.key}" min="0" step="0.01"
+        placeholder="${f.placeholder}" oninput="inspModalCalc()">
+      <span class="insp-modal-unit">${f.unit}</span>`;
+    fieldsEl.appendChild(row);
+  });
+
+  resultEl.textContent = '—';
+  overlay.classList.add('show');
+
+  // 첫 번째 입력란 포커스
+  setTimeout(() => {
+    const first = fieldsEl.querySelector('input');
+    if (first) first.focus();
+  }, 80);
+
+  // Enter 키로 확인
+  overlay.onkeydown = e => {
+    if (e.key === 'Enter')  { e.preventDefault(); inspModalConfirm(); }
+    if (e.key === 'Escape') { e.preventDefault(); inspModalCancel(); }
+  };
+}
+
+function inspModalCalc() {
+  const t = inspDrawType;
+  const resultEl = document.getElementById('insp-modal-result');
+  const get = key => parseFloat(document.getElementById('insp-f-' + key)?.value) || 0;
+
+  let resultText = '';
+  if (t.id === 'crack') {
+    const len = get('length'), wid = get('width'), cnt = get('count') || 1;
+    if (len > 0) resultText = `연장 ${len.toFixed(2)} m`;
+    if (wid > 0) resultText += ` / 폭 ${wid.toFixed(1)} mm`;
+    if (cnt > 1)  resultText += ` / ${cnt}개소`;
+  } else if (t.id === 'other') {
+    const qty = get('qty'), cnt = get('count');
+    if (qty > 0) resultText = `수량 ${qty}개`;
+    if (cnt > 0) resultText += ` / ${cnt}개소`;
+  } else {
+    // 면적 손상
+    const len = get('length'), wid = get('width'), cnt = get('count') || 1;
+    if (len > 0 && wid > 0) resultText = `면적 ${(len * wid).toFixed(4)} m²`;
+    else if (len > 0)        resultText = `길이 ${len.toFixed(2)} m`;
+    if (cnt > 1)              resultText += ` / ${cnt}개소`;
+  }
+  resultEl.textContent = resultText || '—';
+}
+
+function inspModalConfirm() {
+  if (!inspCurrentEntry) { inspModalCancel(); return; }
+  const t   = inspDrawType;
+  const get = key => parseFloat(document.getElementById('insp-f-' + key)?.value) || 0;
+  const key = inspCurrentEntry.imageFile;
+  if (!inspDamages[key]) inspDamages[key] = [];
+
+  let area = 0, length = 0, meta = {};
+
+  if (t.id === 'crack') {
+    length = get('length');
+    meta   = { width: get('width'), count: get('count') || 1 };
+  } else if (t.id === 'other') {
+    meta = { qty: get('qty'), count: get('count') };
+    area = get('qty');
+  } else {
+    const len = get('length'), wid = get('width');
+    area  = parseFloat((len * wid).toFixed(4));
+    meta  = { length: len, width: wid, count: get('count') || 1 };
+  }
+
+  const pts = (_inspPendingPts && _inspPendingPts.length >= 2) ? _inspPendingPts : [];
+  inspDamages[key].push({
+    id: 'dmg_' + (inspNextId++),
+    type: t.id, pts, area, length, meta,
+  });
+
+  _inspPendingPts = null;
+  document.getElementById('insp-modal-overlay').classList.remove('show');
+  inspRedraw();
+  inspRenderHistory();
+}
+
+function inspModalCancel() {
+  _inspPendingPts = null;
+  document.getElementById('insp-modal-overlay').classList.remove('show');
+}
+
+/* 기하 계산 */
+function inspCalcGeo(pts, mode) {
+  const s = inspScaleM;
+  if (mode === 'polyline') {
+    let len = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const dx = pts[i].x-pts[i-1].x, dy = pts[i].y-pts[i-1].y;
+      len += Math.sqrt(dx*dx + dy*dy);
+    }
+    return { area: 0, length: parseFloat((len * s).toFixed(3)) };
+  }
+  let a = 0, n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i+1) % n;
+    a += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+  }
+  return { area: parseFloat((Math.abs(a)/2 * s * s).toFixed(4)), length: 0 };
+}
+
+/* 렌더링 */
+function inspRedraw() {
+  const dc  = document.getElementById('insp-draw-canvas');
+  const ctx = dc.getContext('2d');
+  ctx.clearRect(0, 0, dc.width, dc.height);
+  inspDrawImg();
+  if (!inspCurrentEntry) return;
+  (inspDamages[inspCurrentEntry.imageFile] || []).forEach((d, idx) => {
+    const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
+    if (!t || d.pts.length < 2) return;
+    inspDrawShape(ctx, d.pts, t.color, t.mode, false);
+    inspDrawLabel(ctx, d, t, idx + 1);
+  });
+}
+function inspRedrawPreview(mp) {
+  inspRedraw();
+  const ctx = document.getElementById('insp-draw-canvas').getContext('2d');
+  if (inspDrawMode === 'polygon' && inspDrawing && inspCurrentPts.length > 0)
+    inspDrawShape(ctx, mp ? [...inspCurrentPts, mp] : inspCurrentPts, inspDrawType.color, inspDrawType.mode, true);
+  else if (inspDrawMode === 'freehand' && inspFreehandPts.length > 1)
+    inspDrawShape(ctx, inspFreehandPts, inspDrawType.color, inspDrawType.mode, true);
+}
+function inspDrawShape(ctx, pts, color, mode, preview) {
+  const d = INSP_DPR;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = (preview ? 1.5 : 2) * d;
+  ctx.setLineDash(preview ? [5*d, 4*d] : []);
+  if (mode === 'polyline') {
+    ctx.beginPath();
+    pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = color + '30';
+    ctx.beginPath();
+    pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+  ctx.fillStyle = color;
+  pts.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, (preview ? 2 : 3) * d, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+function inspDrawLabel(ctx, d, t, no) {
+  const D = INSP_DPR;
+
+  // ── 번호 뱃지: pts의 가장 왼쪽·위쪽 꼭짓점 근처 ──
+  if (d.pts.length >= 2) {
+    // 좌상단 꼭짓점 = x+y 합이 가장 작은 점
+    const anchor = d.pts.reduce((best, p) =>
+      (p.x + p.y < best.x + best.y) ? p : best, d.pts[0]);
+
+    const r   = Math.round(10 * D);   // 동그라미 반지름
+    const bx  = anchor.x - r * 0.3;  // 약간 왼쪽 위에 배치
+    const by  = anchor.y - r * 0.3;
+    const fs  = Math.round(10 * D);
+
+    ctx.save();
+    // 동그라미 배경
+    ctx.beginPath();
+    ctx.arc(bx, by, r, 0, Math.PI * 2);
+    ctx.fillStyle = t.color;
+    ctx.fill();
+    // 테두리
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth   = Math.round(1.5 * D);
+    ctx.stroke();
+    // 번호 텍스트
+    ctx.font         = `bold ${fs}px IBM Plex Mono, monospace`;
+    ctx.fillStyle    = '#fff';
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor  = 'rgba(0,0,0,.5)';
+    ctx.shadowBlur   = Math.round(2 * D);
+    ctx.fillText(String(no || ''), bx, by);
+    ctx.restore();
+  }
+
+  // ── 기존 값 라벨 (무게중심 근처) ──
+  const cx = d.pts.reduce((a,p)=>a+p.x,0) / d.pts.length;
+  const cy = d.pts.reduce((a,p)=>a+p.y,0) / d.pts.length;
+
+  // 수치 문자열 생성 (meta 우선)
+  const meta = d.meta || {};
+  let valStr = '';
+  if (t.id === 'crack') {
+    valStr = meta.length ? meta.length.toFixed(2)+'m' : (d.length ? d.length.toFixed(2)+'m' : '');
+    if (meta.width) valStr += '/'+meta.width.toFixed(1)+'mm';
+  } else if (t.id === 'other') {
+    valStr = meta.qty ? meta.qty+'개' : '';
+  } else {
+    const area = (meta.length && meta.width)
+      ? (meta.length * meta.width).toFixed(3)
+      : (d.area ? d.area.toFixed(3) : '');
+    valStr = area ? area+'m²' : '';
+  }
+  if (!valStr) return;
+
+  const fs2 = Math.round(10 * D);
+  ctx.save();
+  ctx.font         = `bold ${fs2}px IBM Plex Mono, monospace`;
+  ctx.fillStyle    = '#fff';
+  ctx.textAlign    = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.shadowColor  = '#000';
+  ctx.shadowBlur   = Math.round(3 * D);
+  ctx.fillText(valStr, cx + 4 * D, cy - 4 * D);
+  ctx.restore();
+}
+
+/* 손상이력 렌더링 */
+function inspRenderHistory() {
+  const summary = document.getElementById('insp-summary');
+  const tbody   = document.getElementById('insp-tbody');
+  if (!summary || !tbody || !inspCurrentEntry) return;
+  const list = inspDamages[inspCurrentEntry.imageFile] || [];
+
+  // 요약 카드
+  const sm = {};
+  INSP_DAMAGE_TYPES.forEach(dt => { sm[dt.id] = { count: 0, total: 0 }; });
+  list.forEach(d => { if (sm[d.type]) { sm[d.type].count++; sm[d.type].total += d.area || d.length || 0; } });
+  summary.innerHTML = '';
+  INSP_DAMAGE_TYPES.forEach(dt => {
+    const s = sm[dt.id]; if (!s || s.count === 0) return;
+    const t = INSP_DAMAGE_TYPES.find(x => x.id === dt.id);
+    const c = document.createElement('div');
+    c.className = 'insp-sum-card';
+    c.style.cssText = `background:${dt.color}18;border:1px solid ${dt.color}55;`;
+    c.innerHTML = `<div style="color:${dt.color};font-weight:600;">${dt.label}</div>
+      <div style="color:#fff;font-size:12px;font-weight:600;">${s.count}개</div>
+      <div style="color:var(--textMut);">${s.total.toFixed(t.mode==='polyline'?2:3)}${t.unit}</div>`;
+    summary.appendChild(c);
+  });
+  if (list.length === 0) {
+    summary.innerHTML = '<span style="color:var(--textMut);font-size:10px;padding:4px 0;">손상 기록 없음</span>';
+  }
+
+  // 테이블
+  tbody.innerHTML = '';
+  list.forEach((d, i) => {
+    const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type); if (!t) return;
+
+    // 수치 표시 (meta 있으면 우선, 없으면 계산값)
+    let valStr = '';
+    if (t.id === 'crack') {
+      const len = d.meta?.length || d.length || 0;
+      const wid = d.meta?.width  || 0;
+      const cnt = d.meta?.count  || 1;
+      valStr = `${len.toFixed(2)}m`;
+      if (wid > 0) valStr += ` / ${wid.toFixed(1)}mm`;
+      if (cnt > 1) valStr += ` / ${cnt}개소`;
+    } else if (t.id === 'other') {
+      const qty = d.meta?.qty   || d.area || 0;
+      const cnt = d.meta?.count || 0;
+      valStr = `${qty}개`;
+      if (cnt > 0) valStr += ` / ${cnt}개소`;
+    } else {
+      const area = d.meta ? (d.meta.length||0)*(d.meta.width||0) : d.area || 0;
+      const cnt  = d.meta?.count || 1;
+      valStr = `${area.toFixed(4)}m²`;
+      if (cnt > 1) valStr += ` / ${cnt}개소`;
+    }
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="color:var(--textMut);">${i+1}</td>
+      <td><span style="display:inline-block;width:6px;height:6px;border-radius:1px;background:${t.color};margin-right:4px;vertical-align:middle;"></span>${t.label}</td>
+      <td style="color:var(--textMut);">${d.meta?.count || 1}</td>
+      <td style="text-align:right;color:#5af;font-family:var(--mono);font-size:10px;">${valStr}</td>
+      <td><button class="insp-del-btn" onclick="inspDeleteDamage('${d.id}')">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* 손상 삭제 */
+function inspDeleteDamage(dmgId) {
+  if (!inspCurrentEntry) return;
+  const key = inspCurrentEntry.imageFile;
+  inspDamages[key] = (inspDamages[key] || []).filter(d => d.id !== dmgId);
+  inspRedraw(); inspRenderHistory();
+}
+
+/* 도구 선택 */
+function inspSetMode(mode) {
+  inspDrawMode = mode;
+  document.getElementById('insp-mode-polygon').classList.toggle('active',  mode === 'polygon');
+  document.getElementById('insp-mode-freehand').classList.toggle('active', mode === 'freehand');
+  inspResetDraw(); inspRedraw();
+}
+function inspSetType(typeId) {
+  const newType = INSP_DAMAGE_TYPES.find(t => t.id === typeId) || INSP_DAMAGE_TYPES[0];
+  const isSameType = inspDrawType.id === typeId;
+  inspDrawType = newType;
+  document.querySelectorAll('.insp-type-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.typeId === typeId);
+  });
+
+  // 이미 선택된 유형을 다시 클릭 → 수치 직접 입력 모달 오픈 (그리기 없이)
+  // 또는 그리는 중이 아닐 때 클릭 → 모달 오픈
+  if (!inspDrawing) {
+    inspResetDraw();
+    inspModalOpen(newType, true);  // withoutDraw = true
+  } else {
+    inspResetDraw(); inspRedraw();
+  }
+}
+
+/* 실행취소 */
+function inspUndo() {
+  if (inspDrawing) {
+    if (inspCurrentPts.length > 0) { inspCurrentPts.pop(); inspRedraw(); }
+    else inspResetDraw();
+  } else if (inspCurrentEntry) {
+    const key = inspCurrentEntry.imageFile;
+    if (inspDamages[key] && inspDamages[key].length > 0) {
+      inspDamages[key].pop();
+      inspRedraw(); inspRenderHistory();
+    }
+  }
+}
+
+/* 전체 삭제 */
+function inspClearAll() {
+  if (!inspCurrentEntry) return;
+  if (!confirm('현재 이미지의 모든 손상을 삭제하시겠습니까?')) return;
+  inspDamages[inspCurrentEntry.imageFile] = [];
+  inspRedraw(); inspRenderHistory();
+}
+
+/* 축척 변경 */
+function inspScaleChange(v) {
+  inspScaleM = parseFloat(v) || 0.01;
+  // 기존 데이터 재계산
+  Object.values(inspDamages).forEach(list => {
+    list.forEach(d => {
+      const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
+      if (!t) return;
+      const r = inspCalcGeo(d.pts, t.mode);
+      d.area = r.area; d.length = r.length;
+    });
+  });
+  inspRenderHistory();
+}
+
+/* 내보내기 */
+function inspExportJSON() {
+  if (!inspCurrentEntry) return;
+  const key  = inspCurrentEntry.imageFile;
+  const data = {
+    imageFile: key, label: inspCurrentEntry.label,
+    memberIds: inspCurrentEntry.memberIds,
+    exportedAt: new Date().toISOString(), scaleM: inspScaleM,
+    damages: (inspDamages[key] || []).map(d => ({
+      ...d, typeLabel: INSP_DAMAGE_TYPES.find(t=>t.id===d.type)?.label || d.type
+    })),
+  };
+  _inspDl(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),
+    `inspection_${inspCurrentEntry.label}_${_inspDs()}.json`);
+}
+/* ══════════════════════════════════════════
+   손상물량표 위치 설정
+══════════════════════════════════════════ */
+const INSP_TABLE_STORAGE_KEY = 'cdg_insp_table_rect';
+
+// 표 영역: 이미지 원본 픽셀 기준 비율로 저장
+// { x1r, y1r, x2r, y2r } — 0~1 범위
+let _inspTableRect = null;
+let _inspTableSetStep = 0;   // 0=비활성, 1=좌상단 대기, 2=우하단 대기
+let _inspTableP1 = null;
+
+// localStorage에서 로드
+(function() {
+  try {
+    const raw = localStorage.getItem(INSP_TABLE_STORAGE_KEY);
+    if (raw) _inspTableRect = JSON.parse(raw);
+  } catch(e) {}
+})();
+
+function inspTableSetStart() {
+  if (!inspImgEl) { alert('이미지를 먼저 로드하세요'); return; }
+  _inspTableSetStep = 1;
+  _inspTableP1 = null;
+  const guide = document.getElementById('insp-table-guide');
+  const msg   = document.getElementById('insp-table-guide-msg');
+  const prev  = document.getElementById('insp-table-preview');
+  guide.classList.add('active');
+  msg.textContent = '① 손상물량표 좌상단을 클릭하세요';
+  prev.style.display = 'none';
+  document.getElementById('insp-table-set-btn').classList.add('active');
+
+  // 가이드 클릭 이벤트
+  guide.onclick = function(e) {
+    const r   = guide.getBoundingClientRect();
+    const cx  = e.clientX - r.left;
+    const cy  = e.clientY - r.top;
+
+    if (_inspTableSetStep === 1) {
+      _inspTableP1 = { cx, cy };
+      msg.textContent = '② 손상물량표 우하단을 클릭하세요  (ESC: 취소)';
+      _inspTableSetStep = 2;
+      // 시작점 표시
+      prev.style.cssText = `display:block;left:${cx}px;top:${cy}px;width:4px;height:4px;background:var(--accent);border:none;border-radius:50%;`;
+    } else if (_inspTableSetStep === 2) {
+      const x1 = Math.min(_inspTableP1.cx, cx);
+      const y1 = Math.min(_inspTableP1.cy, cy);
+      const x2 = Math.max(_inspTableP1.cx, cx);
+      const y2 = Math.max(_inspTableP1.cy, cy);
+
+      // 캔버스 CSS 크기 → 이미지 원본 비율로 변환
+      const wrap = document.getElementById('insp-canvas-wrap');
+      const wW = wrap.clientWidth, wH = wrap.clientHeight;
+      const idr = inspImgDrawRect;
+      if (!idr) return;
+
+      // 이미지가 실제 canvas에서 차지하는 CSS 픽셀 범위
+      const cssSc   = idr.sc / INSP_DPR;  // CSS 픽셀 기준 스케일
+      const imgX1cs = idr.dx / INSP_DPR;
+      const imgY1cs = idr.dy / INSP_DPR;
+
+      // 클릭 좌표 → 이미지 내부 비율 (0~1)
+      const x1r = Math.max(0, Math.min(1, (x1 - imgX1cs) / (inspImgEl.naturalWidth  * cssSc)));
+      const y1r = Math.max(0, Math.min(1, (y1 - imgY1cs) / (inspImgEl.naturalHeight * cssSc)));
+      const x2r = Math.max(0, Math.min(1, (x2 - imgX1cs) / (inspImgEl.naturalWidth  * cssSc)));
+      const y2r = Math.max(0, Math.min(1, (y2 - imgY1cs) / (inspImgEl.naturalHeight * cssSc)));
+
+      _inspTableRect = { x1r, y1r, x2r, y2r };
+      localStorage.setItem(INSP_TABLE_STORAGE_KEY, JSON.stringify(_inspTableRect));
+
+      inspTableSetEnd();
+      alert('손상물량표 위치가 저장됐습니다! PNG 내보내기 시 자동 적용됩니다.');
+    }
+  };
+
+  // 마우스 이동 시 미리보기
+  guide.onmousemove = function(e) {
+    if (_inspTableSetStep !== 2 || !_inspTableP1) return;
+    const r  = guide.getBoundingClientRect();
+    const cx = e.clientX - r.left;
+    const cy = e.clientY - r.top;
+    const x1 = Math.min(_inspTableP1.cx, cx);
+    const y1 = Math.min(_inspTableP1.cy, cy);
+    prev.style.cssText = `display:block;border:2px dashed var(--accent);background:rgba(0,229,204,.05);`
+      + `left:${x1}px;top:${y1}px;width:${Math.abs(cx-_inspTableP1.cx)}px;height:${Math.abs(cy-_inspTableP1.cy)}px;`;
+  };
+}
+
+function inspTableSetEnd() {
+  _inspTableSetStep = 0; _inspTableP1 = null;
+  const guide = document.getElementById('insp-table-guide');
+  guide.classList.remove('active');
+  guide.onclick = null; guide.onmousemove = null;
+  document.getElementById('insp-table-preview').style.display = 'none';
+  document.getElementById('insp-table-set-btn').classList.remove('active');
+}
+
+// ESC로 표 위치 설정 취소
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && _inspTableSetStep > 0) inspTableSetEnd();
+});
+
+/* ══════════════════════════════════════════
+   손상물량표에 데이터 그리기 (PNG 내보내기 전용)
+   컬럼 순서: 번호 | 회차 | 손상내용 | 폭·깊이 | 길이 | 너비 | 개소 | 수량 | 단위 | 비고
+══════════════════════════════════════════ */
+function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
+  if (!_inspTableRect) return;
+  if (!damages || damages.length === 0) return;
+
+  const { x1r, y1r, x2r, y2r } = _inspTableRect;
+  const idr = inspImgDrawRect;
+  if (!idr) return;
+
+  // 이미지가 canvas에서 차지하는 실제 픽셀 영역 (DPR 포함)
+  const tX1 = idr.dx + x1r * idr.dw;
+  const tY1 = idr.dy + y1r * idr.dh;
+  const tX2 = idr.dx + x2r * idr.dw;
+  const tY2 = idr.dy + y2r * idr.dh;
+  const tW  = tX2 - tX1;
+  const tH  = tY2 - tY1;
+
+  // 컬럼 너비 비율 (합계 = 1)
+  // 번호 | 회차 | 손상내용 | 폭깊이 | 길이 | 너비 | 개소 | 수량 | 단위 | 비고
+  const COL_RATIOS = [0.05, 0.06, 0.22, 0.08, 0.08, 0.08, 0.07, 0.08, 0.06, 0.22];
+  const COL_KEYS   = ['no','round','content','widthDepth','length','width','count','qty','unit','note'];
+
+  // 헤더 행 높이 (전체 높이에서 비율)
+  // 이미지 손상물량표에는 헤더 2줄 있으므로 첫 두 행은 skip
+  // 데이터 행 높이 계산
+  const totalRows   = damages.length;
+  // 표 전체에서 헤더 영역(약 12%) 제외한 나머지가 데이터 영역
+  const headerRatio = 0.12;
+  const dataAreaY1  = tY1 + tH * headerRatio;
+  const dataAreaH   = tH * (1 - headerRatio);
+  // 행 하나의 높이 — 이미지의 행 수에 맞춰 자동 계산 (최대 20행 가정)
+  const maxVisRows  = 20;
+  const rowH        = dataAreaH / maxVisRows;
+
+  const fontSize = Math.max(8, Math.round(rowH * 0.55));
+  ctx.save();
+  ctx.font      = `${fontSize}px 'Noto Sans KR', sans-serif`;
+  ctx.fillStyle = '#000000';
+  ctx.textBaseline = 'middle';
+
+  damages.forEach((d, idx) => {
+    if (idx >= maxVisRows) return;
+    const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
+    if (!t) return;
+    const rowY = dataAreaY1 + idx * rowH + rowH / 2;
+
+    // 각 컬럼 데이터 구성
+    const meta = d.meta || {};
+    let contentStr = t.label;
+    let widthDepth = '';
+    let lengthStr  = '';
+    let widthStr   = '';
+    let countStr   = String(meta.count || 1);
+    let qtyStr     = '';
+    let unitStr    = t.unit;
+
+    if (d.type === 'crack') {
+      lengthStr  = meta.length ? meta.length.toFixed(2) : (d.length ? d.length.toFixed(2) : '');
+      widthDepth = meta.width  ? meta.width.toFixed(1)  : '';
+      qtyStr     = lengthStr;
+    } else if (d.type === 'other') {
+      qtyStr  = String(meta.qty || '');
+      unitStr = '개';
+    } else {
+      const len = meta.length || 0;
+      const wid = meta.width  || 0;
+      lengthStr = len ? len.toFixed(2) : '';
+      widthStr  = wid ? wid.toFixed(2) : '';
+      const area = len && wid ? (len * wid).toFixed(4) : (d.area ? d.area.toFixed(4) : '');
+      qtyStr = area;
+    }
+
+    const cellData = {
+      no:         String(idx + 1),
+      round:      '1',
+      content:    contentStr,
+      widthDepth: widthDepth,
+      length:     lengthStr,
+      width:      widthStr,
+      count:      countStr,
+      qty:        qtyStr,
+      unit:       unitStr,
+      note:       '',
+    };
+
+    // 각 컬럼에 텍스트 그리기
+    let colX = tX1;
+    COL_RATIOS.forEach((ratio, ci) => {
+      const colW   = tW * ratio;
+      const key    = COL_KEYS[ci];
+      const text   = cellData[key] || '';
+      const textX  = colX + colW / 2;
+      ctx.textAlign = 'center';
+      // 텍스트가 컬럼 너비를 넘으면 잘라서 표시
+      const maxW = colW - 4;
+      ctx.save();
+      ctx.rect(colX, dataAreaY1 + idx * rowH, colW, rowH);
+      ctx.clip();
+      ctx.fillText(text, textX, rowY);
+      ctx.restore();
+      colX += colW;
+    });
+  });
+
+  ctx.restore();
+}
+
+/* PNG 내보내기 — 손상물량표 텍스트 포함 */
+function inspExportPNG() {
+  if (!inspImgEl) return;
+  const ic  = document.getElementById('insp-img-canvas');
+  const dc  = document.getElementById('insp-draw-canvas');
+  const m   = document.createElement('canvas');
+  m.width   = ic.width;
+  m.height  = ic.height;
+  const ctx = m.getContext('2d');
+
+  // 1. 이미지 + 드로잉
+  ctx.drawImage(ic, 0, 0);
+  ctx.drawImage(dc, 0, 0);
+
+  // 2. 손상물량표에 텍스트 기입
+  if (_inspTableRect && inspCurrentEntry) {
+    const list = inspDamages[inspCurrentEntry.imageFile] || [];
+    if (list.length > 0) {
+      inspDrawDamageTable(ctx, m.width, m.height, list);
+    }
+  }
+
+  m.toBlob(b => _inspDl(b, `inspection_${inspCurrentEntry?.label||'export'}_${_inspDs()}.png`), 'image/png');
+}
+function inspExportCSV() {
+  const rows = [['이미지','부재','손상유형','개수','면적(m²)','연장(m)','내보내기시각']];
+  inspMapData.forEach(entry => {
+    const list = inspDamages[entry.imageFile] || [];
+    const sm = {};
+    INSP_DAMAGE_TYPES.forEach(dt => { sm[dt.id] = { count:0, area:0, length:0 }; });
+    list.forEach(d => { if(sm[d.type]){sm[d.type].count++;sm[d.type].area+=d.area||0;sm[d.type].length+=d.length||0;} });
+    INSP_DAMAGE_TYPES.forEach(dt => {
+      const s = sm[dt.id]; if (!s||s.count===0) return;
+      rows.push([entry.imageFile, entry.label, dt.label, s.count, s.area.toFixed(4), s.length.toFixed(3), new Date().toISOString()]);
+    });
+  });
+  _inspDl(new Blob(['\uFEFF'+rows.map(r=>r.join(',')).join('\n')],{type:'text/csv;charset=utf-8'}),
+    `inspection_all_${_inspDs()}.csv`);
+}
+function _inspDl(blob, name) {
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+function _inspDs() { return new Date().toISOString().slice(0,10).replace(/-/g,''); }
+
+/* 손상 유형 버튼 생성 */
+(function inspInitTypeButtons() {
+  const wrap = document.getElementById('insp-type-btns');
+  if (!wrap) return;
+  INSP_DAMAGE_TYPES.forEach((dt, i) => {
+    const b = document.createElement('button');
+    b.className = 'insp-tool-btn insp-type-btn' + (i===0?' active':'');
+    b.dataset.typeId = dt.id;
+    b.style.borderLeft = '3px solid ' + dt.color;
+    b.textContent = dt.label;
+    b.onclick = () => inspSetType(dt.id);
+    wrap.appendChild(b);
+  });
+})();
+
+/* 이벤트 바인딩 (DOM 완성 후) */
+document.addEventListener('DOMContentLoaded', inspBindEvents);
+if (document.readyState !== 'loading') inspBindEvents();
+
+setInterval(()=>{document.getElementById('time-display').textContent=new Date().toLocaleTimeString('ko-KR',{hour12:false});},1000);
+document.getElementById('time-display').textContent=new Date().toLocaleTimeString('ko-KR',{hour12:false});
+setInterval(()=>{ if(popupSensorId)drawGraphPopup(popupSensorId); },60000);
+
+let t=0;
+function animate() {
+  requestAnimationFrame(animate);
+  t+=0.016;
+  const tx=panX,ty=panY,tz=panZ;
+  camera.position.x=tx+Math.sin(theta)*Math.cos(phi)*radius;
+  camera.position.y=ty+Math.sin(phi)*radius;
+  camera.position.z=tz+Math.cos(theta)*Math.cos(phi)*radius;
+  camera.lookAt(tx,ty,tz);
+  for(let i=0;i<seaPositions.count;i++){const x=seaPositions.getX(i),z=seaPositions.getZ(i);seaPositions.setY(i,seaOriginZ[i]+Math.sin(x*0.015+t*0.6)*0.8+Math.sin(z*0.01+t*0.4)*0.6);}
+  seaPositions.needsUpdate=true; seaGeo.computeVertexNormals();
+  if(deformOn&&modelLoaded){const em=currentVal('EM_P39P40_01'),deform=(em/1000)*deformScale;bridgeGroup.position.y=deform*0.3*Math.sin(t*0.5);bridgeGroup.rotation.x=deform*0.005*Math.cos(t*0.4);}
+  markerGroup.children.forEach(m=>{
+    if(m.userData.isRing){m.scale.setScalar(1+Math.sin(t*2+m.position.x*0.1)*0.2);m.material.opacity=0.2+Math.sin(t*2+m.position.x*0.1)*0.15;}
+    else if(m.userData.sensorId){
+      const sensor=SENSORS.find(s=>s.id===m.userData.sensorId);
+      if(sensor){
+        const status=getStatus(sensor);
+        const col=STATUS_COLORS[status];
+        m.material.color.setHex(col);
+        m.material.emissive.setHex(col);
+        m.material.emissiveIntensity=0.5+Math.sin(t*3+m.position.x*0.1)*0.3;
+        m.children.forEach(child => {
+          if(child.userData.isRing) child.material.color.setHex(col);
+          if(child.userData.isLabel) {
+            const scale = Math.max(0.3, Math.min(1.0, 800 / radius));
+            child.scale.set(8 * scale, 2 * scale, 1);
+            child.material.opacity = radius > 600 ? Math.max(0, 1 - (radius - 600) / 400) : 1;
+          }
+        });
+      }
+    }
+  });
+  const W=wrap.clientWidth,H=wrap.clientHeight;
+  if(renderer.domElement.width!==W||renderer.domElement.height!==H){
+    renderer.setSize(W,H,false);
+    camera.aspect=W/H;camera.updateProjectionMatrix();
+  }
+  // 클릭 하이라이트 펄스 (강하게)
+  if (highlightedMesh && highlightedMesh.material) {
+    highlightedMesh.material.emissiveIntensity = 0.6 + Math.sin(t * 4) * 0.35;
+  }
+  // hover 하이라이트 펄스 (부드럽게)
+  if (hoveredMesh && hoveredMesh.material && hoveredMesh !== highlightedMesh) {
+    hoveredMesh.material.emissiveIntensity = 0.25 + Math.sin(t * 3) * 0.12;
+  }
+
+  renderer.render(scene,camera);
+}
+
+renderer.setSize(wrap.clientWidth,wrap.clientHeight,false);
+camera.aspect=wrap.clientWidth/wrap.clientHeight;
+camera.updateProjectionMatrix();
+renderPanel();
+animate();
+
+window.moveMarker=(id,x,y,z)=>{const m=markerMeshes[id];if(m){m.position.set(x,y,z);console.log(`${id} → (${x},${y},${z})`);} };
+window.listMarkers=()=>SENSORS.forEach(s=>{const m=markerMeshes[s.id];if(m)console.log(`${s.id}: ${m.position.x.toFixed(1)}, ${m.position.y.toFixed(1)}, ${m.position.z.toFixed(1)}`);});
+window.showAllMarkers=()=>SENSORS.forEach(s=>{const m=markerMeshes[s.id];if(m)console.log(`{ id:'${s.id}', pos:[${m.position.x.toFixed(1)}, ${m.position.y.toFixed(1)}, ${m.position.z.toFixed(1)}] },`);});
+
+</script>
+</body>
+</html>

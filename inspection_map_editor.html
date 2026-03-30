@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>외관조사망도 매핑 편집기</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 100%; min-height: 100vh;
+  background: #0d1420; color: #ccc;
+  font-family: 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
+  font-size: 13px;
+}
+
+/* ── 헤더 ── */
+#header {
+  position: sticky; top: 0; z-index: 100;
+  background: #111827; border-bottom: 1px solid #1e2d45;
+  padding: 0 16px;
+  display: flex; align-items: center; gap: 10px; height: 48px;
+}
+#header h1 { font-size: 14px; color: #7ec8fa; font-weight: 600; white-space: nowrap; }
+#header .spacer { flex: 1; }
+
+/* ── 드롭존 ── */
+#dropzone {
+  margin: 16px;
+  border: 2px dashed #2a3a5c;
+  border-radius: 10px;
+  padding: 24px;
+  text-align: center;
+  color: #456;
+  transition: border-color .2s, background .2s;
+  cursor: pointer;
+}
+#dropzone.over { border-color: #3498db; background: #0d1e30; color: #7ec8fa; }
+#dropzone p { margin-top: 6px; font-size: 12px; }
+
+/* ── 툴바 ── */
+#toolbar {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 8px; padding: 8px 16px;
+  background: #111827; border-bottom: 1px solid #1e2d45;
+  position: sticky; top: 48px; z-index: 99;
+}
+#search-input {
+  padding: 4px 10px; width: 200px;
+  background: #0d1420; color: #ccc;
+  border: 1px solid #334; border-radius: 4px; font-size: 12px;
+}
+#search-input::placeholder { color: #456; }
+#filter-select {
+  padding: 4px 8px;
+  background: #0d1420; color: #ccc;
+  border: 1px solid #334; border-radius: 4px; font-size: 12px;
+}
+#row-count { font-size: 11px; color: #456; margin-left: 4px; }
+
+/* ── 테이블 ── */
+#table-wrap {
+  padding: 12px 16px 80px;
+}
+table {
+  width: 100%; border-collapse: collapse;
+}
+thead tr {
+  background: #111827;
+  position: sticky; top: 89px; z-index: 98;
+}
+th {
+  padding: 8px 10px;
+  text-align: left; font-weight: 500; font-size: 11px;
+  color: #3498db; border-bottom: 1px solid #1e2d45;
+  white-space: nowrap;
+}
+tbody tr { border-bottom: 1px solid #111a2e; transition: background .1s; }
+tbody tr:hover { background: #111a2e; }
+td { padding: 5px 6px; vertical-align: middle; }
+
+/* ── 셀 인풋 ── */
+.cell-input {
+  width: 100%; padding: 4px 6px;
+  background: transparent; color: #ddd;
+  border: 1px solid transparent; border-radius: 4px;
+  font-size: 12px; font-family: inherit;
+  transition: border-color .15s, background .15s;
+}
+.cell-input:focus {
+  outline: none;
+  border-color: #3498db; background: #0d1e30;
+}
+.cell-input:hover { border-color: #334; }
+
+/* memberIds 전용 (여러 ID, 줄바꿈 없이 쉼표 구분) */
+.ids-input {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 11px; color: #5af;
+}
+
+/* ── 상태 배지 ── */
+.badge {
+  display: inline-block; padding: 2px 7px;
+  border-radius: 10px; font-size: 10px; font-weight: 600;
+  white-space: nowrap;
+}
+.badge-ok    { background: #0d2a1a; color: #1D9E75; border: 1px solid #1D9E7555; }
+.badge-warn  { background: #2a1a0d; color: #EF9F27; border: 1px solid #EF9F2755; }
+.badge-empty { background: #1a1a2a; color: #556;    border: 1px solid #33334455; }
+
+/* ── 버튼 공통 ── */
+.btn {
+  padding: 5px 12px; font-size: 12px;
+  border-radius: 4px; cursor: pointer;
+  white-space: nowrap; transition: filter .15s;
+  border: 1px solid #334;
+}
+.btn:hover { filter: brightness(1.3); }
+.btn-primary { background: #1a3a5c; color: #7ec8fa; border-color: #3498db; }
+.btn-success { background: #0d2a1a; color: #1D9E75; border-color: #1D9E75; }
+.btn-danger  { background: #2a0d0d; color: #E24B4A; border-color: #E24B4A55; }
+.btn-default { background: #1a1e2e; color: #aaa; }
+
+/* ── 행 번호 ── */
+.row-num { color: #334; font-size: 11px; font-family: monospace; text-align: right; }
+
+/* ── 삭제 버튼 ── */
+.del-btn {
+  background: none; border: none; color: #E24B4A55;
+  cursor: pointer; font-size: 14px; padding: 0 4px;
+  transition: color .15s;
+}
+.del-btn:hover { color: #E24B4A; }
+
+/* ── 파일명 셀 ── */
+.filename-cell { font-family: monospace; font-size: 11px; color: #aaa; }
+
+/* ── 저장 바 (하단 고정) ── */
+#save-bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: #111827; border-top: 1px solid #1e2d45;
+  padding: 10px 16px;
+  display: flex; align-items: center; gap: 10px;
+}
+#save-bar .stat { font-size: 11px; color: #456; flex: 1; }
+#save-bar .stat span { color: #7ec8fa; font-weight: 600; }
+
+/* ── 토스트 ── */
+#toast {
+  position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: #1D9E75; color: #fff; padding: 8px 20px;
+  border-radius: 20px; font-size: 12px; font-weight: 600;
+  opacity: 0; transition: opacity .3s, transform .3s;
+  pointer-events: none; white-space: nowrap;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── 빈 상태 ── */
+#empty-state {
+  text-align: center; padding: 60px 20px; color: #334;
+}
+#empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<!-- 헤더 -->
+<div id="header">
+  <h1>🗺️ 외관조사망도 매핑 편집기</h1>
+  <div class="spacer"></div>
+  <button class="btn btn-default" onclick="addRow()">+ 행 추가</button>
+  <label class="btn btn-default" style="cursor:pointer;">
+    📂 JSON 불러오기
+    <input type="file" accept=".json" id="load-json-input" style="display:none" onchange="loadJSON(this)">
+  </label>
+  <label class="btn btn-default" style="cursor:pointer;">
+    🖼️ 이미지 폴더 스캔
+    <input type="file" accept="image/*" multiple id="scan-input" style="display:none" onchange="scanImages(this)">
+  </label>
+</div>
+
+<!-- 드롭존 -->
+<div id="dropzone"
+  ondragover="event.preventDefault();this.classList.add('over')"
+  ondragleave="this.classList.remove('over')"
+  ondrop="handleDrop(event)"
+  onclick="document.getElementById('scan-input').click()">
+  <div style="font-size:28px;">📁</div>
+  <strong>이미지 파일을 여기로 드래그하거나 클릭하세요</strong>
+  <p>PNG / JPG 파일을 선택하면 파일명이 자동으로 목록에 추가됩니다</p>
+  <p style="margin-top:4px;font-size:11px;opacity:.6;">이미지 파일 자체는 저장되지 않으며 파일명만 등록됩니다</p>
+</div>
+
+<!-- 툴바 -->
+<div id="toolbar">
+  <input id="search-input" type="text" placeholder="🔍 파일명 / 라벨 / ID 검색..."
+    oninput="filterRows()">
+  <select id="filter-select" onchange="filterRows()">
+    <option value="all">전체</option>
+    <option value="ok">연결됨</option>
+    <option value="warn">ID 없음</option>
+    <option value="empty">미완성</option>
+  </select>
+  <span id="row-count"></span>
+  <div style="flex:1"></div>
+  <button class="btn btn-danger" onclick="clearAll()"
+    style="font-size:11px;">🗑 전체 초기화</button>
+</div>
+
+<!-- 테이블 -->
+<div id="table-wrap">
+  <div id="empty-state">
+    <div class="icon">🗺️</div>
+    <div>이미지 파일을 드래그하거나 JSON을 불러오세요</div>
+  </div>
+  <table id="main-table" style="display:none;">
+    <thead>
+      <tr>
+        <th style="width:36px;">No</th>
+        <th style="min-width:200px;">이미지 파일명</th>
+        <th style="min-width:140px;">표시 라벨</th>
+        <th>부재 ID 목록 <span style="color:#456;font-weight:400;">(쉼표로 구분)</span></th>
+        <th style="width:70px;">상태</th>
+        <th style="width:36px;"></th>
+      </tr>
+    </thead>
+    <tbody id="table-body"></tbody>
+  </table>
+</div>
+
+<!-- 저장 바 -->
+<div id="save-bar">
+  <div class="stat">
+    총 <span id="stat-total">0</span>개 항목 /
+    연결됨 <span id="stat-ok">0</span>개 /
+    ID 없음 <span id="stat-warn">0</span>개
+  </div>
+  <button class="btn btn-success" onclick="saveJSON()">💾 inspection_map.json 저장</button>
+  <button class="btn btn-primary" onclick="previewJSON()">👁 미리보기</button>
+</div>
+
+<!-- 토스트 -->
+<div id="toast"></div>
+
+
+<script>
+'use strict';
+
+/* ══════════════════════════════════════════
+   상태
+══════════════════════════════════════════ */
+let rows = [];   // [{ id, imageFile, label, memberIds: string }]
+let nextRowId = 1;
+
+/* ══════════════════════════════════════════
+   이미지 드롭/스캔
+══════════════════════════════════════════ */
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropzone').classList.remove('over');
+  const files = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
+  if (files.length === 0) { toast('이미지 파일이 없습니다', 'warn'); return; }
+  addImageFiles(files);
+}
+
+function scanImages(input) {
+  const files = [...input.files].filter(f => f.type.startsWith('image/'));
+  if (files.length === 0) return;
+  addImageFiles(files);
+  input.value = '';
+}
+
+function addImageFiles(files) {
+  let added = 0;
+  files.forEach(f => {
+    const name = f.name;
+    if (rows.find(r => r.imageFile === name)) return; // 중복 제외
+    rows.push({ id: nextRowId++, imageFile: name, label: _guessLabel(name), memberIds: '' });
+    added++;
+  });
+  if (added === 0) { toast('이미 모두 등록된 파일입니다'); return; }
+  toast(`${added}개 파일 추가됨`);
+  renderTable();
+}
+
+/* 파일명에서 라벨 자동 추출: "001 교각(P37).png" → "교각 P37" */
+function _guessLabel(filename) {
+  // 숫자 접두사 제거, 확장자 제거
+  let name = filename.replace(/^\d+\s*/, '').replace(/\.[^.]+$/, '');
+  // 괄호 내용 추출: "교각(P37)" → "교각 P37"
+  name = name.replace(/[（(](.+?)[)）]/g, ' $1');
+  return name.trim();
+}
+
+/* ══════════════════════════════════════════
+   행 추가 (수동)
+══════════════════════════════════════════ */
+function addRow() {
+  rows.push({ id: nextRowId++, imageFile: '', label: '', memberIds: '' });
+  renderTable();
+  // 마지막 행 파일명 인풋 포커스
+  setTimeout(() => {
+    const inputs = document.querySelectorAll('.file-input');
+    if (inputs.length > 0) inputs[inputs.length - 1].focus();
+  }, 50);
+}
+
+/* ══════════════════════════════════════════
+   JSON 불러오기
+══════════════════════════════════════════ */
+function loadJSON(input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!Array.isArray(data)) { toast('올바른 inspection_map.json 형식이 아닙니다', 'warn'); return; }
+      rows = data.map(item => ({
+        id: nextRowId++,
+        imageFile: item.imageFile || '',
+        label:     item.label     || '',
+        memberIds: Array.isArray(item.memberIds) ? item.memberIds.join(', ') : (item.memberIds || ''),
+      }));
+      toast(`${rows.length}개 항목 불러옴`);
+      renderTable();
+    } catch {
+      toast('JSON 파싱 오류', 'warn');
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+/* ══════════════════════════════════════════
+   테이블 렌더링
+══════════════════════════════════════════ */
+function renderTable(filtered) {
+  const tbody = document.getElementById('table-body');
+  const table = document.getElementById('main-table');
+  const empty = document.getElementById('empty-state');
+  const list  = filtered !== undefined ? filtered : rows;
+
+  if (rows.length === 0) {
+    table.style.display = 'none';
+    empty.style.display = 'block';
+    updateStats();
+    return;
+  }
+  table.style.display = 'table';
+  empty.style.display = 'none';
+
+  tbody.innerHTML = '';
+  list.forEach((row, idx) => {
+    const status = _rowStatus(row);
+    const tr = document.createElement('tr');
+    tr.dataset.rowId = row.id;
+    tr.innerHTML = `
+      <td class="row-num">${rows.indexOf(row) + 1}</td>
+      <td>
+        <input class="cell-input file-input"
+          value="${_esc(row.imageFile)}"
+          placeholder="001 교각(P37).png"
+          data-field="imageFile" data-id="${row.id}"
+          onchange="updateField(${row.id},'imageFile',this.value)"
+          oninput="updateField(${row.id},'imageFile',this.value)">
+      </td>
+      <td>
+        <input class="cell-input"
+          value="${_esc(row.label)}"
+          placeholder="교각 P37"
+          data-field="label" data-id="${row.id}"
+          onchange="updateField(${row.id},'label',this.value)"
+          oninput="updateField(${row.id},'label',this.value)">
+      </td>
+      <td>
+        <input class="cell-input ids-input"
+          value="${_esc(row.memberIds)}"
+          placeholder="77_PI_P37_0_0_0_0, 77_PI_P37_1_0_0_0"
+          data-field="memberIds" data-id="${row.id}"
+          onchange="updateField(${row.id},'memberIds',this.value)"
+          oninput="updateField(${row.id},'memberIds',this.value)">
+      </td>
+      <td>
+        <span class="badge badge-${status.cls}">${status.text}</span>
+      </td>
+      <td>
+        <button class="del-btn" onclick="deleteRow(${row.id})" title="삭제">✕</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+
+  updateStats();
+  document.getElementById('row-count').textContent =
+    filtered !== undefined ? `${list.length} / ${rows.length}개` : `${rows.length}개`;
+}
+
+function _rowStatus(row) {
+  if (!row.imageFile) return { cls: 'empty', text: '파일명 없음' };
+  if (!row.memberIds || row.memberIds.trim() === '')
+    return { cls: 'warn', text: 'ID 없음' };
+  return { cls: 'ok', text: '연결됨' };
+}
+
+function _esc(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
+
+/* ══════════════════════════════════════════
+   필드 업데이트
+══════════════════════════════════════════ */
+function updateField(rowId, field, value) {
+  const row = rows.find(r => r.id === rowId);
+  if (!row) return;
+  row[field] = value;
+  // 상태 배지만 실시간 갱신 (테이블 전체 재렌더 없이)
+  const tr = document.querySelector(`tr[data-row-id="${rowId}"]`);
+  if (tr) {
+    const badge = tr.querySelector('.badge');
+    const s = _rowStatus(row);
+    badge.className = `badge badge-${s.cls}`;
+    badge.textContent = s.text;
+  }
+  updateStats();
+}
+
+/* ══════════════════════════════════════════
+   행 삭제
+══════════════════════════════════════════ */
+function deleteRow(rowId) {
+  rows = rows.filter(r => r.id !== rowId);
+  renderTable();
+}
+
+/* ══════════════════════════════════════════
+   전체 초기화
+══════════════════════════════════════════ */
+function clearAll() {
+  if (rows.length === 0) return;
+  if (!confirm(`${rows.length}개 항목을 모두 초기화하시겠습니까?`)) return;
+  rows = [];
+  renderTable();
+}
+
+/* ══════════════════════════════════════════
+   검색/필터
+══════════════════════════════════════════ */
+function filterRows() {
+  const q      = document.getElementById('search-input').value.toLowerCase();
+  const filter = document.getElementById('filter-select').value;
+
+  let list = rows;
+  if (q) {
+    list = list.filter(r =>
+      (r.imageFile  || '').toLowerCase().includes(q) ||
+      (r.label      || '').toLowerCase().includes(q) ||
+      (r.memberIds  || '').toLowerCase().includes(q)
+    );
+  }
+  if (filter !== 'all') {
+    list = list.filter(r => {
+      const s = _rowStatus(r).cls;
+      return s === filter;
+    });
+  }
+  renderTable(list);
+}
+
+/* ══════════════════════════════════════════
+   통계 업데이트
+══════════════════════════════════════════ */
+function updateStats() {
+  let ok = 0, warn = 0;
+  rows.forEach(r => {
+    const s = _rowStatus(r).cls;
+    if (s === 'ok')   ok++;
+    if (s === 'warn') warn++;
+  });
+  document.getElementById('stat-total').textContent = rows.length;
+  document.getElementById('stat-ok').textContent    = ok;
+  document.getElementById('stat-warn').textContent  = warn;
+}
+
+/* ══════════════════════════════════════════
+   JSON 생성
+══════════════════════════════════════════ */
+function _buildJSON() {
+  return rows
+    .filter(r => r.imageFile.trim() !== '')  // 파일명 없는 행 제외
+    .map(r => ({
+      imageFile: r.imageFile.trim(),
+      label:     r.label.trim() || r.imageFile.trim(),
+      memberIds: r.memberIds
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s !== ''),
+    }));
+}
+
+/* ══════════════════════════════════════════
+   JSON 저장
+══════════════════════════════════════════ */
+function saveJSON() {
+  const data = _buildJSON();
+  if (data.length === 0) { toast('저장할 항목이 없습니다', 'warn'); return; }
+  const blob = new Blob(
+    [JSON.stringify(data, null, 2)],
+    { type: 'application/json' }
+  );
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'inspection_map.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast(`${data.length}개 항목 저장됨 → inspection_map.json`);
+}
+
+/* ══════════════════════════════════════════
+   JSON 미리보기 (인라인)
+══════════════════════════════════════════ */
+function previewJSON() {
+  const data = _buildJSON();
+  const json = JSON.stringify(data, null, 2);
+
+  // 기존 미리보기 제거
+  const existing = document.getElementById('json-preview');
+  if (existing) { existing.remove(); return; }
+
+  const pre = document.createElement('pre');
+  pre.id = 'json-preview';
+  pre.style.cssText = [
+    'margin:0 16px 80px;padding:16px;',
+    'background:#0a0f1a;border:1px solid #1e2d45;border-radius:8px;',
+    'font-size:11px;color:#7ec8fa;font-family:monospace;',
+    'overflow-x:auto;white-space:pre-wrap;word-break:break-all;',
+    'max-height:400px;overflow-y:auto;',
+  ].join('');
+  pre.textContent = json;
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕ 닫기';
+  closeBtn.className = 'btn btn-default';
+  closeBtn.style.cssText = 'display:block;margin:8px 16px;font-size:11px;';
+  closeBtn.onclick = () => { pre.remove(); closeBtn.remove(); };
+
+  document.getElementById('table-wrap').after(closeBtn);
+  closeBtn.after(pre);
+  pre.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ══════════════════════════════════════════
+   토스트
+══════════════════════════════════════════ */
+function toast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.background = type === 'warn' ? '#E24B4A' : '#1D9E75';
+  el.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+/* ══════════════════════════════════════════
+   초기 렌더
+══════════════════════════════════════════ */
+renderTable();
+</script>
+</body>
+</html>
