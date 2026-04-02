@@ -2177,7 +2177,7 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
   const rowH  = rowY2 - rowY1;          // 행 높이 (1개 행)
 
   // 컬럼 너비 비율: 번호|회차|손상내용|폭깊이|길이|너비|개소|수량|단위|비고
-  const COL_RATIOS = [0.0388, 0.068, 0.3107, 0.0777, 0.0825, 0.0825, 0.068, 0.1165, 0.0485, 0.1068];  // 실측값 기준 (mm)
+  const COL_RATIOS = [0.0678, 0.1299, 0.2938, 0.1299, 0.1102, 0.0763, 0.0339, 0.0678, 0.0282, 0.0622];  // 실측값 기준 (mm)
   const COL_KEYS   = ['no','round','content','widthDepth','length','width','count','qty','unit','note'];
 
   const fontSize = Math.max(7, Math.round(rowH * 0.52));
