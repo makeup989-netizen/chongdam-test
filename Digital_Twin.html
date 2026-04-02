@@ -2091,7 +2091,7 @@ function inspTableSetStart() {
   const msg   = document.getElementById('insp-table-guide-msg');
   const prev  = document.getElementById('insp-table-preview');
   guide.classList.add('active');
-  msg.textContent = '① 손상물량표 좌상단을 클릭하세요';
+  msg.textContent = '① 첫 번째 데이터 행의 좌상단을 클릭하세요';
   prev.style.display = 'none';
   document.getElementById('insp-table-set-btn').classList.add('active');
 
@@ -2103,9 +2103,8 @@ function inspTableSetStart() {
 
     if (_inspTableSetStep === 1) {
       _inspTableP1 = { cx, cy };
-      msg.textContent = '② 손상물량표 우하단을 클릭하세요  (ESC: 취소)';
+      msg.textContent = '② 같은 행의 우하단을 클릭하세요  (행 1개만 지정)  (ESC: 취소)';
       _inspTableSetStep = 2;
-      // 시작점 표시
       prev.style.cssText = `display:block;left:${cx}px;top:${cy}px;width:4px;height:4px;background:var(--accent);border:none;border-radius:50%;`;
     } else if (_inspTableSetStep === 2) {
       const x1 = Math.min(_inspTableP1.cx, cx);
@@ -2113,28 +2112,28 @@ function inspTableSetStart() {
       const x2 = Math.max(_inspTableP1.cx, cx);
       const y2 = Math.max(_inspTableP1.cy, cy);
 
-      // 캔버스 CSS 크기 → 이미지 원본 비율로 변환
-      const wrap = document.getElementById('insp-canvas-wrap');
-      const wW = wrap.clientWidth, wH = wrap.clientHeight;
       const idr = inspImgDrawRect;
       if (!idr) return;
 
-      // 이미지가 실제 canvas에서 차지하는 CSS 픽셀 범위
-      const cssSc   = idr.sc / INSP_DPR;  // CSS 픽셀 기준 스케일
+      // CSS 픽셀 → 이미지 내부 비율 (0~1)
+      const cssSc   = idr.sc / INSP_DPR;
       const imgX1cs = idr.dx / INSP_DPR;
       const imgY1cs = idr.dy / INSP_DPR;
 
-      // 클릭 좌표 → 이미지 내부 비율 (0~1)
       const x1r = Math.max(0, Math.min(1, (x1 - imgX1cs) / (inspImgEl.naturalWidth  * cssSc)));
       const y1r = Math.max(0, Math.min(1, (y1 - imgY1cs) / (inspImgEl.naturalHeight * cssSc)));
       const x2r = Math.max(0, Math.min(1, (x2 - imgX1cs) / (inspImgEl.naturalWidth  * cssSc)));
       const y2r = Math.max(0, Math.min(1, (y2 - imgY1cs) / (inspImgEl.naturalHeight * cssSc)));
 
+      // 저장: 행 1개 기준 (x1r, y1r = 시작점, x2r, y2r = 끝점)
+      // rowH = y2r - y1r → 이 높이만큼 아래로 반복
       _inspTableRect = { x1r, y1r, x2r, y2r };
       localStorage.setItem(INSP_TABLE_STORAGE_KEY, JSON.stringify(_inspTableRect));
 
       inspTableSetEnd();
-      alert('손상물량표 위치가 저장됐습니다! PNG 내보내기 시 자동 적용됩니다.');
+      alert(`행 1개 범위가 저장됐습니다!
+행 높이: ${((y2r - y1r) * 100).toFixed(1)}% (이미지 기준)
+PNG 내보내기 시 데이터 수만큼 자동으로 채워집니다.`);
     }
   };
 
@@ -2177,51 +2176,36 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
   const idr = inspImgDrawRect;
   if (!idr) return;
 
-  // 이미지가 canvas에서 차지하는 실제 픽셀 영역 (DPR 포함)
-  const tX1 = idr.dx + x1r * idr.dw;
-  const tY1 = idr.dy + y1r * idr.dh;
-  const tX2 = idr.dx + x2r * idr.dw;
-  const tY2 = idr.dy + y2r * idr.dh;
-  const tW  = tX2 - tX1;
-  const tH  = tY2 - tY1;
+  // 지정한 행 1개의 실제 canvas 픽셀 좌표 (DPR 포함)
+  const rowX1 = idr.dx + x1r * idr.dw;  // 행 좌측
+  const rowY1 = idr.dy + y1r * idr.dh;  // 행 상단 (첫 번째 데이터 행 시작)
+  const rowX2 = idr.dx + x2r * idr.dw;  // 행 우측
+  const rowY2 = idr.dy + y2r * idr.dh;  // 행 하단
+  const rowW  = rowX2 - rowX1;          // 행 너비
+  const rowH  = rowY2 - rowY1;          // 행 높이 (1개 행)
 
-  // 컬럼 너비 비율 (합계 = 1)
-  // 번호 | 회차 | 손상내용 | 폭깊이 | 길이 | 너비 | 개소 | 수량 | 단위 | 비고
+  // 컬럼 너비 비율: 번호|회차|손상내용|폭깊이|길이|너비|개소|수량|단위|비고
   const COL_RATIOS = [0.05, 0.06, 0.22, 0.08, 0.08, 0.08, 0.07, 0.08, 0.06, 0.22];
   const COL_KEYS   = ['no','round','content','widthDepth','length','width','count','qty','unit','note'];
 
-  // 헤더 행 높이 (전체 높이에서 비율)
-  // 이미지 손상물량표에는 헤더 2줄 있으므로 첫 두 행은 skip
-  // 데이터 행 높이 계산
-  const totalRows   = damages.length;
-  // 표 전체에서 헤더 영역(약 12%) 제외한 나머지가 데이터 영역
-  const headerRatio = 0.12;
-  const dataAreaY1  = tY1 + tH * headerRatio;
-  const dataAreaH   = tH * (1 - headerRatio);
-  // 행 하나의 높이 — 이미지의 행 수에 맞춰 자동 계산 (최대 20행 가정)
-  const maxVisRows  = 20;
-  const rowH        = dataAreaH / maxVisRows;
-
-  const fontSize = Math.max(8, Math.round(rowH * 0.55));
+  const fontSize = Math.max(7, Math.round(rowH * 0.52));
   ctx.save();
-  ctx.font      = `${fontSize}px 'Noto Sans KR', sans-serif`;
-  ctx.fillStyle = '#000000';
+  ctx.font         = `${fontSize}px 'Noto Sans KR', sans-serif`;
+  ctx.fillStyle    = '#000000';
   ctx.textBaseline = 'middle';
 
   damages.forEach((d, idx) => {
-    if (idx >= maxVisRows) return;
     const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
     if (!t) return;
-    const rowY = dataAreaY1 + idx * rowH + rowH / 2;
 
-    // 각 컬럼 데이터 구성
+    // 각 행은 지정한 rowH 만큼 아래로 이동
+    const thisRowY1  = rowY1 + idx * rowH;
+    const thisRowMid = thisRowY1 + rowH / 2;
+
+    // 컬럼 데이터 구성
     const meta = d.meta || {};
-    let contentStr = t.label;
-    let widthDepth = '';
-    let lengthStr  = '';
-    let widthStr   = '';
-    let countStr   = String(meta.count || 1);
-    let qtyStr     = '';
+    let widthDepth = '', lengthStr = '', widthStr = '', qtyStr = '';
+    const countStr = String(meta.count || 1);
     let unitStr    = t.unit;
 
     if (d.type === 'crack') {
@@ -2236,14 +2220,14 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
       const wid = meta.width  || 0;
       lengthStr = len ? len.toFixed(2) : '';
       widthStr  = wid ? wid.toFixed(2) : '';
-      const area = len && wid ? (len * wid).toFixed(4) : (d.area ? d.area.toFixed(4) : '');
-      qtyStr = area;
+      qtyStr    = len && wid ? (len * wid).toFixed(3)
+                : (d.area    ? d.area.toFixed(3) : '');
     }
 
     const cellData = {
       no:         String(idx + 1),
       round:      '1',
-      content:    contentStr,
+      content:    t.label,
       widthDepth: widthDepth,
       length:     lengthStr,
       width:      widthStr,
@@ -2254,19 +2238,16 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
     };
 
     // 각 컬럼에 텍스트 그리기
-    let colX = tX1;
+    let colX = rowX1;
     COL_RATIOS.forEach((ratio, ci) => {
-      const colW   = tW * ratio;
-      const key    = COL_KEYS[ci];
-      const text   = cellData[key] || '';
-      const textX  = colX + colW / 2;
-      ctx.textAlign = 'center';
-      // 텍스트가 컬럼 너비를 넘으면 잘라서 표시
-      const maxW = colW - 4;
+      const colW  = rowW * ratio;
+      const text  = cellData[COL_KEYS[ci]] || '';
       ctx.save();
-      ctx.rect(colX, dataAreaY1 + idx * rowH, colW, rowH);
+      ctx.beginPath();
+      ctx.rect(colX, thisRowY1, colW, rowH);
       ctx.clip();
-      ctx.fillText(text, textX, rowY);
+      ctx.textAlign = 'center';
+      ctx.fillText(text, colX + colW / 2, thisRowMid);
       ctx.restore();
       colX += colW;
     });
