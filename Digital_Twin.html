@@ -2169,28 +2169,32 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
   if (!idr) return;
 
   // 지정한 행 1개의 실제 canvas 픽셀 좌표 (DPR 포함)
-  const rowX1 = idr.dx + x1r * idr.dw;  // 행 좌측
-  const rowY1 = idr.dy + y1r * idr.dh;  // 행 상단 (첫 번째 데이터 행 시작)
-  const rowX2 = idr.dx + x2r * idr.dw;  // 행 우측
+  const rowY1 = idr.dy + y1r * idr.dh;  // 행 상단
   const rowY2 = idr.dy + y2r * idr.dh;  // 행 하단
-  const rowW  = rowX2 - rowX1;          // 행 너비
-  const rowH  = rowY2 - rowY1;          // 행 높이 (1개 행)
+  const rowH  = rowY2 - rowY1;           // 행 높이 (1개 행)
 
-  // 컬럼 너비 비율: 번호|회차|손상내용|폭깊이|길이|너비|개소|수량|단위|비고
-  const COL_RATIOS = [0.0678, 0.1299, 0.2938, 0.1299, 0.1102, 0.0763, 0.0339, 0.0678, 0.0282, 0.0622];  // 실측값 기준 (mm)
-  const COL_KEYS   = ['no','round','content','widthDepth','length','width','count','qty','unit','note'];
+  // ── 열 중앙 X좌표 직접 지정 (이미지 원본 1472px 기준 비율) ──
+  // 번호|회차|손상내용|폭깊이|길이|너비|개소|수량|단위|비고
+  const COL_CENTERS = [0.68546, 0.70245, 0.75543, 0.80978, 0.83016, 0.84851, 0.86413, 0.88179, 0.89946, 0.91916];
+  const COL_KEYS    = ['no','round','content','widthDepth','length','width','count','qty','unit','note'];
+
+  // 이미지 원본 비율 → canvas 실제 픽셀 X 변환
+  // idr.dw = canvas에서 이미지가 차지하는 너비, idr.dx = 이미지 시작 X
+  // COL_CENTERS는 이미지 원본 전체 너비 기준 비율
+  // → canvas 상의 X = idr.dx + COL_CENTERS[i] * idr.dw
+  const colCentersPx = COL_CENTERS.map(r => idr.dx + r * idr.dw);
 
   const fontSize = Math.max(7, Math.round(rowH * 0.52));
   ctx.save();
   ctx.font         = `${fontSize}px 'Noto Sans KR', sans-serif`;
   ctx.fillStyle    = '#000000';
   ctx.textBaseline = 'middle';
+  ctx.textAlign    = 'center';
 
   damages.forEach((d, idx) => {
     const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
     if (!t) return;
 
-    // 각 행은 지정한 rowH 만큼 아래로 이동
     const thisRowY1  = rowY1 + idx * rowH;
     const thisRowMid = thisRowY1 + rowH / 2;
 
@@ -2198,7 +2202,7 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
     const meta = d.meta || {};
     let widthDepth = '', lengthStr = '', widthStr = '', qtyStr = '';
     const countStr = String(meta.count || 1);
-    let unitStr    = t.unit;
+    let unitStr = t.unit;
 
     if (d.type === 'crack') {
       lengthStr  = meta.length ? meta.length.toFixed(2) : (d.length ? d.length.toFixed(2) : '');
@@ -2229,19 +2233,11 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
       note:       '',
     };
 
-    // 각 컬럼에 텍스트 그리기
-    let colX = rowX1;
-    COL_RATIOS.forEach((ratio, ci) => {
-      const colW  = rowW * ratio;
-      const text  = cellData[COL_KEYS[ci]] || '';
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(colX, thisRowY1, colW, rowH);
-      ctx.clip();
-      ctx.textAlign = 'center';
-      ctx.fillText(text, colX + colW / 2, thisRowMid);
-      ctx.restore();
-      colX += colW;
+    // 각 열 중앙 X에 텍스트 직접 배치
+    COL_KEYS.forEach((key, ci) => {
+      const text = cellData[key] || '';
+      if (!text) return;
+      ctx.fillText(text, colCentersPx[ci], thisRowMid);
     });
   });
 
