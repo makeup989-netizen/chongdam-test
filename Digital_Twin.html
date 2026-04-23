@@ -630,10 +630,7 @@
         <button class="insp-tool-btn" onclick="inspExportJSON()">💾 JSON</button>
         <button class="insp-tool-btn" onclick="inspExportPNG()">🖼 PNG</button>
         <button class="insp-tool-btn" onclick="inspExportCSV()">📊 CSV</button>
-        <div class="insp-sep"></div>
-        <button class="insp-tool-btn" id="insp-table-set-btn"
-          onclick="inspTableSetStart()"
-          title="손상물량표 영역을 클릭으로 지정합니다">📐 표 위치 설정</button>
+
       </div>
       <div id="insp-canvas-wrap">
         <canvas id="insp-img-canvas"></canvas>
@@ -642,11 +639,7 @@
           <div style="font-size:28px;">🗺️</div>
           <div id="insp-overlay-msg">부재를 클릭하면 외관조사망도가 표시됩니다</div>
         </div>
-        <!-- 표 위치 설정 안내 오버레이 -->
-        <div id="insp-table-guide">
-          <div id="insp-table-guide-msg">① 손상물량표 좌상단을 클릭하세요</div>
-          <div id="insp-table-preview"></div>
-        </div>
+
       </div>
     </div>
 
@@ -2178,7 +2171,7 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
 
   // ── 열 중앙 X좌표 직접 지정 (이미지 원본 1472px 기준 비율) ──
   // 번호|회차|손상내용|폭깊이|길이|너비|개소|수량|단위|비고
-  const COL_CENTERS = [0.69565, 0.71604, 0.77241, 0.82676, 0.8485, 0.87025, 0.88587, 0.90353, 0.92256, 0.92935];
+  const COL_CENTERS = [0.69675, 0.7146, 0.7723, 0.82873, 0.84952, 0.86921, 0.88579, 0.90476, 0.92325, 0.94405];  // 6300px 기준
   const COL_KEYS    = ['no','round','content','widthDepth','length','width','count','qty','unit','note'];
 
   // 이미지 원본 비율 → canvas 실제 픽셀 X 변환
