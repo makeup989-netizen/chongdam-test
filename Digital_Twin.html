@@ -2166,12 +2166,15 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
   const idr = inspImgDrawRect;
   if (!idr) return;
 
-  // ── 고정값 (이미지 원본 1472×863px 기준) ──
-  const ROW_Y1_RATIO = 0.58864;  // 첫 번째 데이터 행 상단 Y (508px / 863px)
-  const ROW_H_RATIO  = 0.07764;  // 행 높이 (67px / 863px)
+  // ── 고정값 (이미지 원본 6300×4455px 기준) ──
+  const ORIG_H    = inspImgEl.naturalHeight;  // 실제 이미지 원본 높이
+  const ROW_Y1_PX = 508;   // 첫 번째 데이터 행 상단 Y (원본 px 기준)
+  const ROW_H_PX  = 67;    // 행 높이 (원본 px 기준)
 
-  const rowY1 = idr.dy + ROW_Y1_RATIO * idr.dh;  // 행 상단 (canvas px)
-  const rowH  = ROW_H_RATIO * idr.dh;              // 행 높이 (canvas px)
+  // 원본 px → canvas 실제 px 변환
+  const imgScale = idr.dh / ORIG_H;
+  const rowY1 = idr.dy + ROW_Y1_PX * imgScale;  // 행 상단 (canvas px)
+  const rowH  = ROW_H_PX * imgScale;             // 행 높이 (canvas px)
 
   // ── 열 중앙 X좌표 직접 지정 (이미지 원본 1472px 기준 비율) ──
   // 번호|회차|손상내용|폭깊이|길이|너비|개소|수량|단위|비고
