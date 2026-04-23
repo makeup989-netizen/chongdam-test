@@ -2161,17 +2161,17 @@ document.addEventListener('keydown', e => {
    컬럼 순서: 번호 | 회차 | 손상내용 | 폭·깊이 | 길이 | 너비 | 개소 | 수량 | 단위 | 비고
 ══════════════════════════════════════════ */
 function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
-  if (!_inspTableRect) return;
   if (!damages || damages.length === 0) return;
 
-  const { x1r, y1r, x2r, y2r } = _inspTableRect;
   const idr = inspImgDrawRect;
   if (!idr) return;
 
-  // 지정한 행 1개의 실제 canvas 픽셀 좌표 (DPR 포함)
-  const rowY1 = idr.dy + y1r * idr.dh;  // 행 상단
-  const rowY2 = idr.dy + y2r * idr.dh;  // 행 하단
-  const rowH  = rowY2 - rowY1;           // 행 높이 (1개 행)
+  // ── 고정값 (이미지 원본 1472×863px 기준) ──
+  const ROW_Y1_RATIO = 0.58864;  // 첫 번째 데이터 행 상단 Y (508px / 863px)
+  const ROW_H_RATIO  = 0.07764;  // 행 높이 (67px / 863px)
+
+  const rowY1 = idr.dy + ROW_Y1_RATIO * idr.dh;  // 행 상단 (canvas px)
+  const rowH  = ROW_H_RATIO * idr.dh;              // 행 높이 (canvas px)
 
   // ── 열 중앙 X좌표 직접 지정 (이미지 원본 1472px 기준 비율) ──
   // 번호|회차|손상내용|폭깊이|길이|너비|개소|수량|단위|비고
@@ -2258,8 +2258,8 @@ function inspExportPNG() {
   ctx.drawImage(ic, 0, 0);
   ctx.drawImage(dc, 0, 0);
 
-  // 2. 손상물량표에 텍스트 기입
-  if (_inspTableRect && inspCurrentEntry) {
+  // 2. 손상물량표에 텍스트 기입 (고정 위치 - 표 위치 설정 불필요)
+  if (inspCurrentEntry) {
     const list = inspDamages[inspCurrentEntry.imageFile] || [];
     if (list.length > 0) {
       inspDrawDamageTable(ctx, m.width, m.height, list);
