@@ -356,6 +356,33 @@
     font-size: 12px; gap: 10px; pointer-events: none; letter-spacing: .06em;
   }
 
+  /* 손상 선택/편집 패널 */
+  #insp-edit-panel {
+    display: none;
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin: 0 0 8px 0;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+  #insp-edit-panel.show { display: block; }
+  .insp-edit-title {
+    color: var(--accent); font-size: 10px; letter-spacing: .08em;
+    margin-bottom: 8px;
+  }
+  .insp-edit-btns { display: flex; gap: 5px; flex-wrap: wrap; }
+  .insp-edit-btn {
+    flex: 1; padding: 5px 4px;
+    border: 1px solid var(--border); border-radius: 3px;
+    background: transparent; color: var(--textMut);
+    font-family: var(--mono); font-size: 10px;
+    cursor: pointer; transition: all .15s; text-align: center;
+  }
+  .insp-edit-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .insp-edit-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+
   /* 우측 손상이력 */
   #insp-history {
     width: 280px; flex-shrink: 0;
@@ -644,6 +671,23 @@
     <!-- 우측: 손상이력 -->
     <div id="insp-history">
       <div id="insp-history-header">DAMAGE HISTORY</div>
+      <!-- 선택된 손상 편집 패널 -->
+      <div id="insp-edit-panel">
+        <div class="insp-edit-title" id="insp-edit-title">● 손상 선택됨</div>
+        <div class="insp-edit-btns">
+          <button class="insp-edit-btn" onclick="inspEditRedraw()">✏ 다시 그리기</button>
+          <button class="insp-edit-btn" onclick="inspEditMeta()">📝 수치 수정</button>
+          <button class="insp-edit-btn" id="insp-edit-rotate-btn" onclick="inspEditRotateMode()" style="display:none;">↻ 회전</button>
+          <button class="insp-edit-btn danger" onclick="inspEditDelete()">✕ 삭제</button>
+        </div>
+        <div id="insp-edit-rotate-ctrl" style="display:none;margin-top:8px;">
+          <div style="color:var(--textMut);font-size:10px;margin-bottom:4px;">회전 각도</div>
+          <input type="range" min="0" max="360" value="0" id="insp-edit-rotate-slider"
+            style="width:100%;accent-color:var(--accent);"
+            oninput="inspEditRotate(this.value)">
+          <div style="text-align:center;color:var(--accent);font-size:10px;" id="insp-edit-rotate-val">0°</div>
+        </div>
+      </div>
       <div id="insp-summary"></div>
       <div id="insp-table-wrap">
         <table id="insp-table">
@@ -2233,9 +2277,10 @@ function inspRenderHistory() {
       if (wid > 0) valStr += ` / ${wid.toFixed(1)}mm`;
       if (cnt > 1) valStr += ` / ${cnt}개소`;
     } else if (t.id === 'other') {
-      const qty = d.meta?.qty   || d.area || 0;
-      const cnt = d.meta?.count || 0;
-      valStr = `${qty}개`;
+      const qty   = d.meta?.qty   || d.area || 0;
+      const cnt   = d.meta?.count || 0;
+      const label = d.meta?.customLabel || '';
+      valStr = label ? `${label} ${qty}개` : `${qty}개`;
       if (cnt > 0) valStr += ` / ${cnt}개소`;
     } else {
       const area = d.meta ? (d.meta.length||0)*(d.meta.width||0) : d.area || 0;
@@ -2253,6 +2298,131 @@ function inspRenderHistory() {
       <td><button class="insp-del-btn" onclick="inspDeleteDamage('${d.id}')">✕</button></td>`;
     tbody.appendChild(tr);
   });
+}
+
+/* ── 손상 선택/편집 패널 ── */
+function _inspShowEditPanel(damage, idx) {
+  const panel = document.getElementById('insp-edit-panel');
+  const title = document.getElementById('insp-edit-title');
+  const rotBtn = document.getElementById('insp-edit-rotate-btn');
+  const rotCtrl = document.getElementById('insp-edit-rotate-ctrl');
+  if (!panel) return;
+
+  const t = INSP_DAMAGE_TYPES.find(x => x.id === damage.type);
+  title.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${t?.color||'#fff'};margin-right:5px;vertical-align:middle;"></span>${t?.label || damage.type} #${idx + 1} 선택됨`;
+
+  // 원형 여부: pts가 32개 이상이면 원형으로 판단
+  const isCircle = damage.pts && damage.pts.length >= 28;
+  rotBtn.style.display = isCircle ? '' : 'none';
+  rotCtrl.style.display = 'none';
+
+  // 기존 회전각 복원
+  if (isCircle && damage.meta?._rotation != null) {
+    const deg = Math.round(damage.meta._rotation * 180 / Math.PI);
+    document.getElementById('insp-edit-rotate-slider').value = deg;
+    document.getElementById('insp-edit-rotate-val').textContent = deg + '°';
+  }
+
+  panel.classList.add('show');
+}
+
+function _inspHideEditPanel() {
+  const panel = document.getElementById('insp-edit-panel');
+  if (panel) panel.classList.remove('show');
+  document.getElementById('insp-edit-rotate-ctrl').style.display = 'none';
+}
+
+// 다시 그리기 — 기존 손상 제거 후 같은 번호로 재등록
+function inspEditRedraw() {
+  if (_inspSelectedIdx === null || !inspCurrentEntry) return;
+  const key = inspCurrentEntry.imageFile;
+  const damages = inspDamages[key] || [];
+  const d = damages[_inspSelectedIdx];
+  if (!d) return;
+
+  // 손상 유형 설정
+  const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
+  if (t) inspSetType(t.id);
+
+  // 편집 모드 설정
+  _inspEditIdx = _inspSelectedIdx;
+  _inspSelectedIdx = null;
+  _inspHideEditPanel();
+
+  // 안내
+  alert(`${t?.label || d.type} #${_inspEditIdx + 1}을 다시 그려주세요.
+그리기 완료 후 수치 입력창이 열립니다.`);
+  inspRedraw();
+}
+
+// 수치만 수정
+function inspEditMeta() {
+  if (_inspSelectedIdx === null || !inspCurrentEntry) return;
+  const key = inspCurrentEntry.imageFile;
+  const d = inspDamages[key]?.[_inspSelectedIdx];
+  if (!d) return;
+  const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
+  if (!t) return;
+
+  _inspEditIdx = _inspSelectedIdx;
+  inspDrawType = t;
+  // 기존 pts 유지 (_inspPendingPts = null → inspModalConfirm에서 기존 pts 유지)
+  _inspPendingPts = null;
+  inspModalOpen(t, false, d.meta);
+}
+
+// 회전 모드 토글
+function inspEditRotateMode() {
+  const ctrl = document.getElementById('insp-edit-rotate-ctrl');
+  ctrl.style.display = ctrl.style.display === 'none' ? '' : 'none';
+}
+
+// 원형 회전 적용
+function inspEditRotate(degStr) {
+  if (_inspSelectedIdx === null || !inspCurrentEntry) return;
+  const deg = parseFloat(degStr);
+  const rad = deg * Math.PI / 180;
+  document.getElementById('insp-edit-rotate-val').textContent = deg + '°';
+
+  const key = inspCurrentEntry.imageFile;
+  const d = inspDamages[key]?.[_inspSelectedIdx];
+  if (!d || d.pts.length < 28) return;
+
+  // 중심점 계산
+  const cx = d.pts.reduce((s, p) => s + p.x, 0) / d.pts.length;
+  const cy = d.pts.reduce((s, p) => s + p.y, 0) / d.pts.length;
+
+  // 원래 반경 (첫 번째 점 기준)
+  if (!d.meta._origPts) d.meta._origPts = [...d.pts];  // 원본 저장
+  const origPts = d.meta._origPts;
+  const baseRad = d.meta._baseRot || 0;
+
+  // 회전 적용
+  d.pts = origPts.map((p, i) => {
+    const angle = (i / origPts.length) * Math.PI * 2 + rad;
+    const rx = p.x - cx, ry = p.y - cy;
+    const r = Math.sqrt(rx*rx + ry*ry);
+    const origAngle = Math.atan2(ry, rx);
+    return {
+      x: cx + r * Math.cos(origAngle + rad),
+      y: cy + r * Math.sin(origAngle + rad),
+    };
+  });
+  d.meta._rotation = rad;
+  inspRedraw();
+}
+
+// 선택 손상 삭제
+function inspEditDelete() {
+  if (_inspSelectedIdx === null || !inspCurrentEntry) return;
+  const key = inspCurrentEntry.imageFile;
+  const damages = inspDamages[key];
+  if (!damages) return;
+  damages.splice(_inspSelectedIdx, 1);
+  _inspSelectedIdx = null;
+  _inspHideEditPanel();
+  inspRedraw();
+  inspRenderHistory();
 }
 
 /* 손상 삭제 */
@@ -2492,6 +2662,8 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
     } else if (d.type === 'other') {
       qtyStr  = String(meta.qty || '');
       unitStr = '개';
+      // 기타: customLabel을 손상내용으로 사용
+      if (meta.customLabel) cellData_override_content = meta.customLabel;
     } else {
       const len = meta.length || 0;
       const wid = meta.width  || 0;
@@ -2501,10 +2673,12 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
                 : (d.area    ? d.area.toFixed(3) : '');
     }
 
+    let cellData_override_content = null;
     const cellData = {
       no:         String(idx + 1),
       round:      '1',
       content:    t.label,
+      widthDepth: widthDepth,
       widthDepth: widthDepth,
       length:     lengthStr,
       width:      widthStr,
@@ -2513,6 +2687,7 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
       unit:       unitStr,
       note:       '',
     };
+    if (cellData_override_content) cellData.content = cellData_override_content;
 
     // 각 열 중앙 X에 텍스트 직접 배치
     COL_KEYS.forEach((key, ci) => {
