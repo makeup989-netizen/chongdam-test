@@ -1577,20 +1577,42 @@ function inspZoomReset() {
 
 /* 좌표 */
 /* 클릭 좌표 → 캔버스 내부 좌표 (DPR 배율 적용) */
+// canvas px → 이미지 비율 좌표 (0~1) 변환
+// 저장은 항상 이미지 비율로, 그릴 때 canvas px로 역변환
+function _canvasPxToRatio(cx, cy) {
+  const idr = inspImgDrawRect;
+  if (!idr) return { x: 0, y: 0 };
+  return {
+    x: (cx - idr.dx) / idr.dw,
+    y: (cy - idr.dy) / idr.dh,
+  };
+}
+// 이미지 비율 → canvas px 변환
+function _ratioToCanvasPx(rx, ry) {
+  const idr = inspImgDrawRect;
+  if (!idr) return { x: 0, y: 0 };
+  return {
+    x: idr.dx + rx * idr.dw,
+    y: idr.dy + ry * idr.dh,
+  };
+}
+// pts 배열 변환 헬퍼
+function _ptsToCanvas(pts) {
+  return pts.map(p => _ratioToCanvasPx(p.x, p.y));
+}
+
 function inspPt(e) {
   const r = document.getElementById('insp-draw-canvas').getBoundingClientRect();
-  return {
-    x: (e.clientX - r.left) * INSP_DPR,
-    y: (e.clientY - r.top)  * INSP_DPR
-  };
+  const cx = (e.clientX - r.left) * INSP_DPR;
+  const cy = (e.clientY - r.top)  * INSP_DPR;
+  return _canvasPxToRatio(cx, cy);  // 비율 좌표로 저장
 }
 function inspPtT(e) {
   const r = document.getElementById('insp-draw-canvas').getBoundingClientRect();
   const t = e.touches[0] || e.changedTouches[0];
-  return {
-    x: (t.clientX - r.left) * INSP_DPR,
-    y: (t.clientY - r.top)  * INSP_DPR
-  };
+  const cx = (t.clientX - r.left) * INSP_DPR;
+  const cy = (t.clientY - r.top)  * INSP_DPR;
+  return _canvasPxToRatio(cx, cy);  // 비율 좌표로 저장
 }
 
 /* 이벤트 바인딩 (DOM 준비 후 1회 실행) */
@@ -1802,6 +1824,26 @@ function inspBindEvents() {
     .observe(document.getElementById('insp-canvas-wrap'));
 }
 
+// 손상 히트 테스트 (클릭 좌표 p가 손상 d 위에 있는지)
+// p는 비율 좌표 (inspPt 반환값)
+function _inspHitTest(p, d) {
+  if (!d.pts || d.pts.length < 2) return false;
+  // 클릭점과 각 꼭짓점의 최소 거리로 판단 (비율 좌표)
+  // bounding box 먼저 체크
+  const xs = d.pts.map(pt => pt.x), ys = d.pts.map(pt => pt.y);
+  const margin = 0.02;  // 비율 기준 여유값
+  if (p.x < Math.min(...xs) - margin || p.x > Math.max(...xs) + margin) return false;
+  if (p.y < Math.min(...ys) - margin || p.y > Math.max(...ys) + margin) return false;
+  // 폴리곤 내부 point-in-polygon
+  let inside = false;
+  for (let i = 0, j = d.pts.length - 1; i < d.pts.length; j = i++) {
+    const xi = d.pts[i].x, yi = d.pts[i].y;
+    const xj = d.pts[j].x, yj = d.pts[j].y;
+    if (((yi > p.y) !== (yj > p.y)) && (p.x < (xj - xi) * (p.y - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+
 // 사각형/원형 → 점 배열 변환
 function _inspShapeToPoints(a, b) {
   if (inspDrawMode === 'rect') {
@@ -1829,9 +1871,10 @@ function _inspShapeToPoints(a, b) {
 function inspRedrawShapePreview() {
   if (!_inspShapeAnchor || !_inspShapeCurrent) return;
   inspRedraw();
-  const pts = _inspShapeToPoints(_inspShapeAnchor, _inspShapeCurrent);
+  const ratioPts = _inspShapeToPoints(_inspShapeAnchor, _inspShapeCurrent);
+  const canvasPts = _ptsToCanvas(ratioPts);
   const ctx = document.getElementById('insp-draw-canvas').getContext('2d');
-  inspDrawShape(ctx, pts, inspDrawType.color, 'polygon', true);
+  inspDrawShape(ctx, canvasPts, inspDrawType.color, 'polygon', true);
 }
 
 /* 드로잉 완료 → 수치 입력 모달 오픈 */
@@ -1987,19 +2030,21 @@ function inspModalCancel() {
 
 /* 기하 계산 */
 function inspCalcGeo(pts, mode) {
+  // pts는 비율 좌표(0~1) → canvas px로 변환 후 계산
+  const cPts = _ptsToCanvas(pts);
   const s = inspScaleM;
   if (mode === 'polyline') {
     let len = 0;
-    for (let i = 1; i < pts.length; i++) {
-      const dx = pts[i].x-pts[i-1].x, dy = pts[i].y-pts[i-1].y;
+    for (let i = 1; i < cPts.length; i++) {
+      const dx = cPts[i].x-cPts[i-1].x, dy = cPts[i].y-cPts[i-1].y;
       len += Math.sqrt(dx*dx + dy*dy);
     }
     return { area: 0, length: parseFloat((len * s).toFixed(3)) };
   }
-  let a = 0, n = pts.length;
+  let a = 0, n = cPts.length;
   for (let i = 0; i < n; i++) {
     const j = (i+1) % n;
-    a += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+    a += cPts[i].x * cPts[j].y - cPts[j].x * cPts[i].y;
   }
   return { area: parseFloat((Math.abs(a)/2 * s * s).toFixed(4)), length: 0 };
 }
@@ -2015,19 +2060,21 @@ function inspRedraw() {
     const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
     if (!t || d.pts.length < 2) return;
     const isSelected = _inspSelectedIdx === idx;
-    inspDrawShape(ctx, d.pts, t.color, t.mode, false, isSelected);
-    inspDrawLabel(ctx, d, t, idx + 1);
-    // 선택된 원형: 회전 핸들 표시
-    if (isSelected && d.meta && d.meta._isCircle) inspDrawRotateHandle(ctx, d.pts, d.meta._rotation || 0);
+    const canvasPts = _ptsToCanvas(d.pts);  // 비율 → canvas px 변환
+    inspDrawShape(ctx, canvasPts, t.color, t.mode, false, isSelected);
+    inspDrawLabel(ctx, { ...d, pts: canvasPts }, t, idx + 1);
+    if (isSelected && d.meta && d.meta._isCircle) inspDrawRotateHandle(ctx, canvasPts, d.meta._rotation || 0);
   });
 }
 function inspRedrawPreview(mp) {
   inspRedraw();
   const ctx = document.getElementById('insp-draw-canvas').getContext('2d');
-  if (inspDrawMode === 'line' && inspDrawing && inspCurrentPts.length > 0)
-    inspDrawShape(ctx, mp ? [...inspCurrentPts, mp] : inspCurrentPts, inspDrawType.color, 'polyline', true);
-  else if (inspDrawMode === 'curve' && inspFreehandPts.length > 1)
-    inspDrawShape(ctx, inspFreehandPts, inspDrawType.color, 'polyline', true);
+  if (inspDrawMode === 'line' && inspDrawing && inspCurrentPts.length > 0) {
+    const pts = _ptsToCanvas(mp ? [...inspCurrentPts, mp] : inspCurrentPts);
+    inspDrawShape(ctx, pts, inspDrawType.color, 'polyline', true);
+  } else if (inspDrawMode === 'curve' && inspFreehandPts.length > 1) {
+    inspDrawShape(ctx, _ptsToCanvas(inspFreehandPts), inspDrawType.color, 'polyline', true);
+  }
 }
 function inspDrawShape(ctx, pts, color, mode, preview, selected) {
   const d = INSP_DPR;
