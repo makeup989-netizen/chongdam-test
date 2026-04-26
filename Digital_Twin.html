@@ -622,6 +622,9 @@
         <button class="insp-tool-btn" onclick="inspUndo()" title="실행취소">↩ 실행취소</button>
         <button class="insp-tool-btn" onclick="inspClearAll()" title="전체삭제">🗑 전체삭제</button>
         <div class="insp-sep"></div>
+        <button class="insp-tool-btn" onclick="inspZoomReset()" title="줌 초기화 (100%)">⊙ 초기화</button>
+        <span id="insp-zoom-label" style="font-size:10px;color:var(--textMut);font-family:var(--mono);min-width:38px;text-align:center;">100%</span>
+        <div class="insp-sep"></div>
         <button class="insp-tool-btn" onclick="inspExportJSON()">💾 JSON</button>
         <button class="insp-tool-btn" onclick="inspExportPNG()">🖼 PNG</button>
         <button class="insp-tool-btn" onclick="inspExportCSV()">📊 CSV</button>
@@ -1386,7 +1389,8 @@ const INSP_DAMAGE_TYPES = [
     fields: [
       { key:'qty',   label:'수량', unit:'개', placeholder:'1'    },
       { key:'count', label:'개소', unit:'개', placeholder:'1'    },
-    ]
+    ],
+    hasCustomLabel: true,
   },
 ];
 
@@ -1398,6 +1402,8 @@ let inspNextId       = 1;
 let inspDrawMode     = 'line';
 let inspDrawType     = INSP_DAMAGE_TYPES[0];
 let inspDrawing      = false;
+let _inspSelectedIdx = null;   // 현재 선택된 손상 인덱스
+let _inspRotation    = 0;      // 원형 회전 각도 (라디안)
 let inspCurrentPts   = [];
 let inspFreehandPts  = [];
 let inspLastTap      = 0;
@@ -1516,6 +1522,13 @@ function inspSelectEntry(entry) {
 /* 캔버스 크기 동기화 — DPR 적용으로 고해상도 렌더링 */
 const INSP_DPR = Math.min(window.devicePixelRatio || 1, 3);
 
+// ── 줌 / 패닝 상태 ──
+let _inspZoom   = 1.0;    // 배율 (1.0 = 원본)
+let _inspPanX   = 0;      // 패닝 X (canvas px)
+let _inspPanY   = 0;      // 패닝 Y (canvas px)
+let _inspPanning = false;
+let _inspPanStart = null;
+
 function inspSyncSize() {
   const wrap = document.getElementById('insp-canvas-wrap');
   const w = wrap.clientWidth  || 280;
@@ -1530,23 +1543,36 @@ function inspSyncSize() {
   if (inspImgEl) { inspDrawImg(); inspRedraw(); }
 }
 
-/* 이미지 그리기 — imageSmoothingQuality high로 선명도 최대화 */
+/* 이미지 그리기 — 줌/패닝 포함 */
 function inspDrawImg() {
   if (!inspImgEl) return;
   const c   = document.getElementById('insp-img-canvas');
   const ctx = c.getContext('2d');
   const W = c.width, H = c.height;
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = '#f0f0f0';
   ctx.fillRect(0, 0, W, H);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  const sc = Math.min(W / inspImgEl.naturalWidth, H / inspImgEl.naturalHeight);
-  const dw = inspImgEl.naturalWidth  * sc;
-  const dh = inspImgEl.naturalHeight * sc;
-  const dx = (W - dw) / 2;
-  const dy = (H - dh) / 2;
+
+  // 기본 스케일 (fit)
+  const scBase = Math.min(W / inspImgEl.naturalWidth, H / inspImgEl.naturalHeight);
+  const sc  = scBase * _inspZoom;
+  const dw  = inspImgEl.naturalWidth  * sc;
+  const dh  = inspImgEl.naturalHeight * sc;
+  // 줌 기준: 중앙 + 패닝 오프셋
+  const dx  = (W - dw) / 2 + _inspPanX;
+  const dy  = (H - dh) / 2 + _inspPanY;
   inspImgDrawRect = { dx, dy, dw, dh, sc };
   ctx.drawImage(inspImgEl, dx, dy, dw, dh);
+  // 줌 레벨 표시 업데이트
+  const zl = document.getElementById('insp-zoom-label');
+  if (zl) zl.textContent = Math.round(_inspZoom * 100) + '%';
+}
+
+/* 줌 리셋 */
+function inspZoomReset() {
+  _inspZoom = 1.0; _inspPanX = 0; _inspPanY = 0;
+  inspDrawImg(); inspRedraw();
 }
 
 /* 좌표 */
@@ -1581,6 +1607,28 @@ function inspBindEvents() {
     if (e.button !== 0) return;
     e.stopPropagation();
     const p = inspPt(e);
+
+    // 그리는 중이 아닐 때: 기존 손상 클릭 선택 체크
+    if (!inspDrawing && inspCurrentEntry) {
+      const damages = inspDamages[inspCurrentEntry.imageFile] || [];
+      let hit = -1;
+      for (let i = damages.length - 1; i >= 0; i--) {
+        if (_inspHitTest(p, damages[i])) { hit = i; break; }
+      }
+      if (hit >= 0) {
+        _inspSelectedIdx = (_inspSelectedIdx === hit) ? null : hit;
+        inspRedraw();
+        // 선택 시 수정 패널 표시
+        if (_inspSelectedIdx !== null) _inspShowEditPanel(damages[hit], hit);
+        else _inspHideEditPanel();
+        return;
+      } else if (_inspSelectedIdx !== null) {
+        // 빈 곳 클릭 → 선택 해제
+        _inspSelectedIdx = null;
+        _inspHideEditPanel();
+        inspRedraw();
+      }
+    }
 
     if (inspDrawMode === 'line') {
       // 직선: 첫 클릭 → 시작점, 두 번째 클릭 → 완료
@@ -1686,6 +1734,69 @@ function inspBindEvents() {
     if (inspDrawing && inspDrawMode === 'curve' && inspFreehandPts.length > 1) inspFinish();
   });
 
+  // ── 휠: 줌 (Ctrl 없이도 작동) ──
+  dc.addEventListener('wheel', e => {
+    e.preventDefault();
+    if (!inspImgEl) return;
+    const rect = dc.getBoundingClientRect();
+    // 마우스 위치 기준 줌
+    const mouseX = (e.clientX - rect.left) * INSP_DPR;
+    const mouseY = (e.clientY - rect.top)  * INSP_DPR;
+
+    const zoomFactor = e.deltaY < 0 ? 1.12 : 0.89;
+    const newZoom = Math.max(0.2, Math.min(20, _inspZoom * zoomFactor));
+
+    // 마우스 위치 기준으로 패닝 보정
+    const W = dc.width, H = dc.height;
+    const scBase = Math.min(W / inspImgEl.naturalWidth, H / inspImgEl.naturalHeight);
+    const oldSc = scBase * _inspZoom;
+    const newSc = scBase * newZoom;
+    _inspPanX += (mouseX - W/2 - _inspPanX) * (1 - newSc / oldSc);
+    _inspPanY += (mouseY - H/2 - _inspPanY) * (1 - newSc / oldSc);
+    _inspZoom = newZoom;
+    inspDrawImg(); inspRedraw();
+  }, { passive: false });
+
+  // ── 중간 버튼 or Space+드래그: 패닝 ──
+  dc.addEventListener('mousedown', e => {
+    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+      e.preventDefault();
+      _inspPanning = true;
+      _inspPanStart = { x: e.clientX - _inspPanX / INSP_DPR, y: e.clientY - _inspPanY / INSP_DPR };
+    }
+  });
+  window.addEventListener('mousemove', e => {
+    if (!_inspPanning || !_inspPanStart) return;
+    _inspPanX = (e.clientX - _inspPanStart.x) * INSP_DPR;
+    _inspPanY = (e.clientY - _inspPanStart.y) * INSP_DPR;
+    inspDrawImg(); inspRedraw();
+  });
+  window.addEventListener('mouseup', e => {
+    if (e.button === 1 || _inspPanning) { _inspPanning = false; _inspPanStart = null; }
+  });
+
+  // ── 터치 핀치 줌 ──
+  let _pinchDist = null;
+  dc.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      _pinchDist = Math.sqrt(dx*dx + dy*dy);
+    }
+  }, { passive: true });
+  dc.addEventListener('touchmove', e => {
+    if (e.touches.length === 2 && _pinchDist) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const newDist = Math.sqrt(dx*dx + dy*dy);
+      _inspZoom = Math.max(0.2, Math.min(20, _inspZoom * (newDist / _pinchDist)));
+      _pinchDist = newDist;
+      inspDrawImg(); inspRedraw();
+    }
+  }, { passive: false });
+  dc.addEventListener('touchend', () => { _pinchDist = null; });
+
   // 캔버스 리사이즈
   new ResizeObserver(() => inspSyncSize())
     .observe(document.getElementById('insp-canvas-wrap'));
@@ -1740,24 +1851,42 @@ function inspResetDraw() {
 }
 
 /* ── 수치 입력 모달 ── */
-function inspModalOpen(damageType, withoutDraw) {
+// 수정 모드용 — 수정 중인 손상 idx
+let _inspEditIdx = null;
+
+function inspModalOpen(damageType, withoutDraw, editMeta) {
   // withoutDraw: 손상유형 버튼 직접 클릭 시 true
+  // editMeta: 수정 모드 시 기존 meta 값
   if (withoutDraw) _inspPendingPts = [];
   const overlay = document.getElementById('insp-modal-overlay');
   const titleEl = document.getElementById('insp-modal-title');
   const fieldsEl = document.getElementById('insp-modal-fields');
   const resultEl = document.getElementById('insp-modal-result');
 
-  titleEl.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${damageType.color};margin-right:6px;vertical-align:middle;"></span>${damageType.label} — 수치 입력`;
+  const isEdit = _inspEditIdx !== null;
+  titleEl.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${damageType.color};margin-right:6px;vertical-align:middle;"></span>${damageType.label} — ${isEdit ? '수치 수정' : '수치 입력'}`;
   fieldsEl.innerHTML = '';
+
+  // 기타: 손상내용 직접 입력 필드 추가
+  if (damageType.hasCustomLabel) {
+    const row = document.createElement('div');
+    row.className = 'insp-modal-field';
+    row.innerHTML = `
+      <label>손상내용</label>
+      <input type="text" id="insp-f-customLabel" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:3px;font-family:var(--mono);font-size:12px;"
+        placeholder="손상내용 직접 입력" value="${editMeta?.customLabel || ''}">
+      <span class="insp-modal-unit"></span>`;
+    fieldsEl.appendChild(row);
+  }
 
   damageType.fields.forEach(f => {
     const row = document.createElement('div');
     row.className = 'insp-modal-field';
+    const existVal = editMeta && editMeta[f.key] != null ? editMeta[f.key] : '';
     row.innerHTML = `
       <label>${f.label}</label>
       <input type="number" id="insp-f-${f.key}" min="0" step="0.01"
-        placeholder="${f.placeholder}" oninput="inspModalCalc()">
+        placeholder="${f.placeholder}" value="${existVal}" oninput="inspModalCalc()">
       <span class="insp-modal-unit">${f.unit}</span>`;
     fieldsEl.appendChild(row);
   });
@@ -1807,6 +1936,7 @@ function inspModalConfirm() {
   if (!inspCurrentEntry) { inspModalCancel(); return; }
   const t   = inspDrawType;
   const get = key => parseFloat(document.getElementById('insp-f-' + key)?.value) || 0;
+  const getStr = key => document.getElementById('insp-f-' + key)?.value?.trim() || '';
   const key = inspCurrentEntry.imageFile;
   if (!inspDamages[key]) inspDamages[key] = [];
 
@@ -1816,7 +1946,7 @@ function inspModalConfirm() {
     length = get('length');
     meta   = { width: get('width'), count: get('count') || 1 };
   } else if (t.id === 'other') {
-    meta = { qty: get('qty'), count: get('count') };
+    meta = { qty: get('qty'), count: get('count'), customLabel: getStr('customLabel') };
     area = get('qty');
   } else {
     const len = get('length'), wid = get('width');
@@ -1824,11 +1954,25 @@ function inspModalConfirm() {
     meta  = { length: len, width: wid, count: get('count') || 1 };
   }
 
-  const pts = (_inspPendingPts && _inspPendingPts.length >= 2) ? _inspPendingPts : [];
-  inspDamages[key].push({
-    id: 'dmg_' + (inspNextId++),
-    type: t.id, pts, area, length, meta,
-  });
+  if (_inspEditIdx !== null) {
+    // 수정 모드: pts는 유지, meta/area/length만 갱신
+    const existing = inspDamages[key][_inspEditIdx];
+    if (existing) {
+      existing.meta   = meta;
+      existing.area   = area;
+      existing.length = length;
+      // 새로 그린 pts가 있으면 교체
+      if (_inspPendingPts && _inspPendingPts.length >= 2) existing.pts = _inspPendingPts;
+    }
+    _inspEditIdx = null;
+  } else {
+    // 신규 추가
+    const pts = (_inspPendingPts && _inspPendingPts.length >= 2) ? _inspPendingPts : [];
+    inspDamages[key].push({
+      id: 'dmg_' + (inspNextId++),
+      type: t.id, pts, area, length, meta,
+    });
+  }
 
   _inspPendingPts = null;
   document.getElementById('insp-modal-overlay').classList.remove('show');
@@ -1870,8 +2014,11 @@ function inspRedraw() {
   (inspDamages[inspCurrentEntry.imageFile] || []).forEach((d, idx) => {
     const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
     if (!t || d.pts.length < 2) return;
-    inspDrawShape(ctx, d.pts, t.color, t.mode, false);
+    const isSelected = _inspSelectedIdx === idx;
+    inspDrawShape(ctx, d.pts, t.color, t.mode, false, isSelected);
     inspDrawLabel(ctx, d, t, idx + 1);
+    // 선택된 원형: 회전 핸들 표시
+    if (isSelected && d.meta && d.meta._isCircle) inspDrawRotateHandle(ctx, d.pts, d.meta._rotation || 0);
   });
 }
 function inspRedrawPreview(mp) {
@@ -1882,28 +2029,52 @@ function inspRedrawPreview(mp) {
   else if (inspDrawMode === 'curve' && inspFreehandPts.length > 1)
     inspDrawShape(ctx, inspFreehandPts, inspDrawType.color, 'polyline', true);
 }
-function inspDrawShape(ctx, pts, color, mode, preview) {
+function inspDrawShape(ctx, pts, color, mode, preview, selected) {
   const d = INSP_DPR;
   ctx.save();
-  ctx.strokeStyle = color;
-  ctx.lineWidth   = (preview ? 1.5 : 2) * d;
+  // 선택된 손상: 외곽 글로우 효과
+  if (selected) {
+    ctx.shadowColor = '#FFFFFF';
+    ctx.shadowBlur  = 8 * d;
+  }
+  ctx.strokeStyle = selected ? '#FFFFFF' : color;
+  ctx.lineWidth   = (preview ? 1.5 : selected ? 2.5 : 2) * d;
   ctx.setLineDash(preview ? [5*d, 4*d] : []);
   if (mode === 'polyline') {
     ctx.beginPath();
     pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
     ctx.stroke();
   } else {
-    ctx.fillStyle = color + '30';
+    ctx.fillStyle = color + (selected ? '50' : '30');
     ctx.beginPath();
     pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
     ctx.closePath(); ctx.fill(); ctx.stroke();
   }
+  ctx.shadowBlur = 0;
   ctx.fillStyle = color;
   pts.forEach(p => {
     ctx.beginPath();
     ctx.arc(p.x, p.y, (preview ? 2 : 3) * d, 0, Math.PI * 2);
     ctx.fill();
   });
+  ctx.restore();
+}
+
+// 원형 회전 핸들 그리기
+function inspDrawRotateHandle(ctx, pts, rotation) {
+  if (!pts.length) return;
+  const d = INSP_DPR;
+  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+  const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+  const r  = Math.sqrt(Math.pow(pts[0].x - cx, 2) + Math.pow(pts[0].y - cy, 2));
+  const hx = cx + (r + 20*d) * Math.cos(rotation - Math.PI/2);
+  const hy = cy + (r + 20*d) * Math.sin(rotation - Math.PI/2);
+  ctx.save();
+  ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1.5*d; ctx.setLineDash([4*d,3*d]);
+  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(hx, hy); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = '#00E5CC'; ctx.lineWidth = 2*d;
+  ctx.beginPath(); ctx.arc(hx, hy, 7*d, 0, Math.PI*2); ctx.fill(); ctx.stroke();
   ctx.restore();
 }
 function inspDrawLabel(ctx, d, t, no) {
