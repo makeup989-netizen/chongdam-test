@@ -1691,10 +1691,12 @@ function inspBindEvents() {
     }
 
     // 그리는 중이 아닐 때: 기존 손상 클릭 선택 체크
-    if (!inspDrawing && inspCurrentEntry) {
+    if (!inspDrawing && !_inspMoveMode && inspCurrentEntry) {
       const damages = inspDamages[inspCurrentEntry.imageFile] || [];
       let hit = -1;
       for (let i = damages.length - 1; i >= 0; i--) {
+        // pts가 없는 손상은 히트 테스트 제외
+        if (!damages[i].pts || damages[i].pts.length < 2) continue;
         if (_inspHitTest(p, damages[i])) { hit = i; break; }
       }
       if (hit >= 0) {
@@ -1962,12 +1964,13 @@ function inspRedrawShapePreview() {
 let _inspPendingPts = null;  // 모달 확인 전 임시 보관
 
 function inspFinish() {
-  if (!inspCurrentEntry) return;
+  if (!inspCurrentEntry) { console.warn('[inspFinish] inspCurrentEntry가 null'); return; }
   const pts = inspDrawMode === 'curve' ? [...inspFreehandPts] : [...inspCurrentPts];
   inspResetDraw();
   inspRedraw();
-  if (pts.length < 2) return;
+  if (pts.length < 2) { console.warn('[inspFinish] pts 부족:', pts.length); return; }
   _inspPendingPts = pts;
+  console.log('[inspFinish] 모달 오픈, pts:', pts.length, 'mode:', inspDrawMode);
   inspModalOpen(inspDrawType);
 }
 function inspResetDraw() {
@@ -2202,7 +2205,7 @@ function inspModalConfirm() {
     _inspEditIdx = null;
   } else {
     // 신규 추가
-    const pts = (_inspPendingPts && _inspPendingPts.length >= 2) ? _inspPendingPts : (_inspPendingPts || []);
+    const pts = (_inspPendingPts && _inspPendingPts.length >= 2) ? _inspPendingPts : [];
     inspDamages[key].push({
       id: 'dmg_' + (inspNextId++),
       type: t.id, pts, area, length, meta,
