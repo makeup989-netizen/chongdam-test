@@ -2838,16 +2838,27 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
     let widthDepth = '', lengthStr = '', widthStr = '', qtyStr = '';
     const countStr = String(meta.count || 1);
     let unitStr = t.unit;
+    let contentStr = t.label;  // 기본 손상내용
 
     if (d.type === 'crack') {
       lengthStr  = meta.length ? meta.length.toFixed(2) : (d.length ? d.length.toFixed(2) : '');
       widthDepth = meta.width  ? meta.width.toFixed(1)  : '';
       qtyStr     = lengthStr;
     } else if (d.type === 'other') {
-      qtyStr  = String(meta.qty || '');
-      unitStr = '개';
-      // 기타: customLabel을 손상내용으로 사용
-      if (meta.customLabel) cellData_override_content = meta.customLabel;
+      const otherUnit = meta.otherUnit || 'count';
+      if (meta.customLabel) contentStr = meta.customLabel;
+      if (otherUnit === 'count') {
+        qtyStr = String(meta.qty || ''); unitStr = '개';
+      } else if (otherUnit === 'area') {
+        const len = meta.length || 0, wid = meta.width || 0;
+        lengthStr = len ? len.toFixed(2) : '';
+        widthStr  = wid ? wid.toFixed(2) : '';
+        qtyStr    = (len && wid) ? (len * wid).toFixed(3) : '';
+        unitStr   = 'm²';
+      } else if (otherUnit === 'length') {
+        lengthStr = meta.length ? meta.length.toFixed(2) : '';
+        qtyStr    = lengthStr; unitStr = 'm';
+      }
     } else {
       const len = meta.length || 0;
       const wid = meta.width  || 0;
@@ -2857,12 +2868,10 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
                 : (d.area    ? d.area.toFixed(3) : '');
     }
 
-    let cellData_override_content = null;
     const cellData = {
       no:         String(idx + 1),
       round:      '1',
-      content:    t.label,
-      widthDepth: widthDepth,
+      content:    contentStr,
       widthDepth: widthDepth,
       length:     lengthStr,
       width:      widthStr,
@@ -2871,7 +2880,6 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
       unit:       unitStr,
       note:       '',
     };
-    if (cellData_override_content) cellData.content = cellData_override_content;
 
     // 각 열 중앙 X에 텍스트 직접 배치
     COL_KEYS.forEach((key, ci) => {
