@@ -2244,15 +2244,18 @@ function inspRedraw() {
   ctx.clearRect(0, 0, dc.width, dc.height);
   inspDrawImg();
   if (!inspCurrentEntry) return;
-  (inspDamages[inspCurrentEntry.imageFile] || []).forEach((d, idx) => {
+  const damages = inspDamages[inspCurrentEntry.imageFile] || [];
+  damages.forEach((d, idx) => {
     const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
     if (!t || d.pts.length < 2) return;
     const isSelected = _inspSelectedIdx === idx;
-    const canvasPts = _ptsToCanvas(d.pts);  // 비율 → canvas px 변환
+    const canvasPts = _ptsToCanvas(d.pts);
     inspDrawShape(ctx, canvasPts, t.color, t.mode, false, isSelected);
     inspDrawLabel(ctx, { ...d, pts: canvasPts }, t, idx + 1);
     if (isSelected && d.meta && d.meta._isCircle) inspDrawRotateHandle(ctx, canvasPts, d.meta._rotation || 0);
   });
+  // 실시간 손상물량표 오버레이
+  if (damages.length > 0) inspDrawDamageTable(ctx, dc.width, dc.height, damages);
 }
 function inspRedrawPreview(mp) {
   inspRedraw();
@@ -2897,19 +2900,49 @@ function inspExportPNG() {
   m.toBlob(b => _inspDl(b, `inspection_${inspCurrentEntry?.label||'export'}_${_inspDs()}.png`), 'image/png');
 }
 function inspExportCSV() {
-  const rows = [['이미지','부재','손상유형','개수','면적(m²)','연장(m)','내보내기시각']];
+  // 손상물량표 형식: 번호,회차,손상내용,폭/깊이,길이,너비,개소,수량,단위,비고
+  const allRows = [['손상물량표'], ['번호','회차','손상내용','폭/깊이','길이','너비','개소','수량','단위','비고']];
+
   inspMapData.forEach(entry => {
     const list = inspDamages[entry.imageFile] || [];
-    const sm = {};
-    INSP_DAMAGE_TYPES.forEach(dt => { sm[dt.id] = { count:0, area:0, length:0 }; });
-    list.forEach(d => { if(sm[d.type]){sm[d.type].count++;sm[d.type].area+=d.area||0;sm[d.type].length+=d.length||0;} });
-    INSP_DAMAGE_TYPES.forEach(dt => {
-      const s = sm[dt.id]; if (!s||s.count===0) return;
-      rows.push([entry.imageFile, entry.label, dt.label, s.count, s.area.toFixed(4), s.length.toFixed(3), new Date().toISOString()]);
+    if (list.length === 0) return;
+
+    allRows.push([`[${entry.label}]`,'','','','','','','','','']);
+
+    list.forEach((d, idx) => {
+      const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
+      if (!t) return;
+      const meta = d.meta || {};
+      let contentStr = (d.type === 'other' && meta.customLabel) ? meta.customLabel : t.label;
+      let widthDepth = '', lengthStr = '', widthStr = '', qtyStr = '', unitStr = t.unit;
+
+      if (d.type === 'crack') {
+        widthDepth = meta.width  ? meta.width.toFixed(1)  : '';
+        lengthStr  = meta.length ? meta.length.toFixed(2) : (d.length ? d.length.toFixed(2) : '');
+        qtyStr = lengthStr; unitStr = 'm';
+      } else if (d.type === 'other') {
+        const ou = meta.otherUnit || 'count';
+        if (ou === 'count')  { qtyStr = String(meta.qty||''); unitStr = '개'; }
+        else if (ou === 'area') {
+          lengthStr = (meta.length||0).toFixed(2); widthStr = (meta.width||0).toFixed(2);
+          qtyStr = ((meta.length||0)*(meta.width||0)).toFixed(3); unitStr = 'm²';
+        } else { lengthStr = (meta.length||0).toFixed(2); qtyStr = lengthStr; unitStr = 'm'; }
+      } else {
+        const len = meta.length||0, wid = meta.width||0;
+        lengthStr = len ? len.toFixed(2) : ''; widthStr = wid ? wid.toFixed(2) : '';
+        qtyStr = (len&&wid) ? (len*wid).toFixed(3) : (d.area ? d.area.toFixed(3) : ''); unitStr = 'm²';
+      }
+
+      allRows.push([String(idx+1),'1',contentStr,widthDepth,lengthStr,widthStr,String(meta.count||1),qtyStr,unitStr,'']);
     });
+    allRows.push(['','','','','','','','','','']);
   });
-  _inspDl(new Blob(['\uFEFF'+rows.map(r=>r.join(',')).join('\n')],{type:'text/csv;charset=utf-8'}),
-    `inspection_all_${_inspDs()}.csv`);
+
+  _inspDl(
+    new Blob(['\uFEFF' + allRows.map(r => r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n')],
+      {type:'text/csv;charset=utf-8'}),
+    `inspection_${_inspDs()}.csv`
+  );
 }
 function _inspDl(blob, name) {
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
