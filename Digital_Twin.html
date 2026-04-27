@@ -2298,12 +2298,15 @@ function inspDrawShape(ctx, pts, color, mode, preview, selected) {
     ctx.closePath(); ctx.fill(); ctx.stroke();
   }
   ctx.shadowBlur = 0;
-  ctx.fillStyle = color;
-  pts.forEach(p => {
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, (preview ? 2 : 3) * d, 0, Math.PI * 2);
-    ctx.fill();
-  });
+  // 꼭짓점 점: preview 시에만 표시 (확정된 손상은 선만 표시)
+  if (preview) {
+    ctx.fillStyle = color;
+    pts.forEach(p => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2 * d, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
   ctx.restore();
 }
 
