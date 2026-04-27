@@ -677,6 +677,7 @@
         <div class="insp-edit-btns">
           <button class="insp-edit-btn" onclick="inspEditRedraw()">✏ 다시 그리기</button>
           <button class="insp-edit-btn" onclick="inspEditMeta()">📝 수치 수정</button>
+          <button class="insp-edit-btn" id="insp-edit-move-btn" onclick="inspEditMoveMode()">⤢ 이동</button>
           <button class="insp-edit-btn" id="insp-edit-rotate-btn" onclick="inspEditRotateMode()" style="display:none;">↻ 회전</button>
           <button class="insp-edit-btn danger" onclick="inspEditDelete()">✕ 삭제</button>
         </div>
@@ -1674,6 +1675,17 @@ function inspBindEvents() {
     e.stopPropagation();
     const p = inspPt(e);
 
+    // 이동 모드: 드래그 시작
+    if (_inspMoveMode && _inspSelectedIdx !== null) {
+      const key = inspCurrentEntry?.imageFile;
+      const d = inspDamages[key]?.[_inspSelectedIdx];
+      if (d) {
+        _inspMoveDragStart = p;
+        _inspMoveOrigPts = d.pts.map(pt => ({ ...pt }));
+      }
+      return;
+    }
+
     // 그리는 중이 아닐 때: 기존 손상 클릭 선택 체크
     if (!inspDrawing && inspCurrentEntry) {
       const damages = inspDamages[inspCurrentEntry.imageFile] || [];
@@ -1723,8 +1735,22 @@ function inspBindEvents() {
 
   // ── 마우스 MOVE ──
   dc.addEventListener('mousemove', e => {
-    if (!inspDrawing) return;
     const p = inspPt(e);
+
+    // 이동 모드: 드래그로 손상 이동
+    if (_inspMoveMode && _inspMoveDragStart && _inspMoveOrigPts && _inspSelectedIdx !== null) {
+      const dx = p.x - _inspMoveDragStart.x;
+      const dy = p.y - _inspMoveDragStart.y;
+      const key = inspCurrentEntry?.imageFile;
+      const d = inspDamages[key]?.[_inspSelectedIdx];
+      if (d) {
+        d.pts = _inspMoveOrigPts.map(pt => ({ x: pt.x + dx, y: pt.y + dy }));
+        inspRedraw();
+      }
+      return;
+    }
+
+    if (!inspDrawing) return;
 
     if (inspDrawMode === 'line') {
       inspRedrawPreview(p);
@@ -1739,6 +1765,13 @@ function inspBindEvents() {
 
   // ── 마우스 UP ──
   dc.addEventListener('mouseup', e => {
+    // 이동 모드 드래그 완료
+    if (_inspMoveMode && _inspMoveDragStart) {
+      _inspMoveDragStart = null;
+      _inspMoveOrigPts = null;
+      inspRenderHistory();
+      return;
+    }
     if (!inspDrawing) return;
     if (inspDrawMode === 'curve' && inspFreehandPts.length > 1) {
       inspFinish();
@@ -1954,16 +1987,47 @@ function inspModalOpen(damageType, withoutDraw, editMeta) {
   titleEl.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${damageType.color};margin-right:6px;vertical-align:middle;"></span>${damageType.label} — ${isEdit ? '수치 수정' : '수치 입력'}`;
   fieldsEl.innerHTML = '';
 
-  // 기타: 손상내용 직접 입력 필드 추가
+  // 기타: 손상내용 + 단위 선택 + 동적 입력 필드
   if (damageType.hasCustomLabel) {
-    const row = document.createElement('div');
-    row.className = 'insp-modal-field';
-    row.innerHTML = `
-      <label>손상내용</label>
-      <input type="text" id="insp-f-customLabel" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:3px;font-family:var(--mono);font-size:12px;"
-        placeholder="손상내용 직접 입력" value="${editMeta?.customLabel || ''}">
-      <span class="insp-modal-unit"></span>`;
-    fieldsEl.appendChild(row);
+    const existUnit = editMeta?.otherUnit || 'count';  // count/area/length
+
+    fieldsEl.innerHTML = `
+      <div class="insp-modal-field">
+        <label>손상내용</label>
+        <input type="text" id="insp-f-customLabel"
+          style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:3px;font-family:var(--mono);font-size:12px;"
+          placeholder="손상내용 직접 입력" value="${editMeta?.customLabel || ''}">
+        <span class="insp-modal-unit"></span>
+      </div>
+      <div class="insp-modal-field" style="gap:4px;">
+        <label>단위 유형</label>
+        <div style="display:flex;gap:4px;flex:1;">
+          <button type="button" id="insp-other-unit-count"
+            class="insp-edit-btn${existUnit==='count'?' active':''}"
+            style="flex:1;padding:4px;font-size:10px;${existUnit==='count'?'border-color:var(--accent);color:var(--accent);':''}"
+            onclick="inspOtherUnitSelect('count')">개수</button>
+          <button type="button" id="insp-other-unit-area"
+            class="insp-edit-btn${existUnit==='area'?' active':''}"
+            style="flex:1;padding:4px;font-size:10px;${existUnit==='area'?'border-color:var(--accent);color:var(--accent);':''}"
+            onclick="inspOtherUnitSelect('area')">면적</button>
+          <button type="button" id="insp-other-unit-length"
+            class="insp-edit-btn${existUnit==='length'?' active':''}"
+            style="flex:1;padding:4px;font-size:10px;${existUnit==='length'?'border-color:var(--accent);color:var(--accent);':''}"
+            onclick="inspOtherUnitSelect('length')">길이</button>
+        </div>
+        <span class="insp-modal-unit"></span>
+      </div>
+      <div id="insp-other-fields"></div>
+      <div class="insp-modal-field">
+        <label>개소</label>
+        <input type="number" id="insp-f-count" min="0" step="1"
+          placeholder="1" value="${editMeta?.count || ''}" oninput="inspModalCalc()">
+        <span class="insp-modal-unit">개</span>
+      </div>`;
+
+    // 단위 유형에 맞는 필드 렌더링
+    inspOtherUnitSelect(existUnit, editMeta);
+    return;  // 아래 fields 루프 skip
   }
 
   damageType.fields.forEach(f => {
@@ -1994,6 +2058,62 @@ function inspModalOpen(damageType, withoutDraw, editMeta) {
   };
 }
 
+// 기타 단위 유형 선택
+function inspOtherUnitSelect(unitType, editMeta) {
+  const fieldsDiv = document.getElementById('insp-other-fields');
+  if (!fieldsDiv) return;
+  // 버튼 활성화
+  ['count','area','length'].forEach(u => {
+    const btn = document.getElementById('insp-other-unit-' + u);
+    if (!btn) return;
+    const active = u === unitType;
+    btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
+    btn.style.color = active ? 'var(--accent)' : 'var(--textMut)';
+  });
+  // 단위에 따라 필드 변경
+  if (unitType === 'count') {
+    fieldsDiv.innerHTML = `
+      <div class="insp-modal-field">
+        <label>수량</label>
+        <input type="number" id="insp-f-qty" min="0" step="1" placeholder="1"
+          value="${editMeta?.qty || ''}" oninput="inspModalCalc()">
+        <span class="insp-modal-unit">개</span>
+      </div>`;
+  } else if (unitType === 'area') {
+    fieldsDiv.innerHTML = `
+      <div class="insp-modal-field">
+        <label>길이</label>
+        <input type="number" id="insp-f-length" min="0" step="0.01" placeholder="0.00"
+          value="${editMeta?.length || ''}" oninput="inspModalCalc()">
+        <span class="insp-modal-unit">m</span>
+      </div>
+      <div class="insp-modal-field">
+        <label>너비</label>
+        <input type="number" id="insp-f-width" min="0" step="0.01" placeholder="0.00"
+          value="${editMeta?.width || ''}" oninput="inspModalCalc()">
+        <span class="insp-modal-unit">m</span>
+      </div>`;
+  } else if (unitType === 'length') {
+    fieldsDiv.innerHTML = `
+      <div class="insp-modal-field">
+        <label>길이</label>
+        <input type="number" id="insp-f-length" min="0" step="0.01" placeholder="0.00"
+          value="${editMeta?.length || ''}" oninput="inspModalCalc()">
+        <span class="insp-modal-unit">m</span>
+      </div>`;
+  }
+  // 현재 선택된 단위 유형 저장 (hidden)
+  let hiddenInput = document.getElementById('insp-f-otherUnit');
+  if (!hiddenInput) {
+    hiddenInput = document.createElement('input');
+    hiddenInput.type = 'hidden';
+    hiddenInput.id = 'insp-f-otherUnit';
+    document.getElementById('insp-other-fields').parentNode.appendChild(hiddenInput);
+  }
+  hiddenInput.value = unitType;
+  inspModalCalc();
+}
+
 function inspModalCalc() {
   const t = inspDrawType;
   const resultEl = document.getElementById('insp-modal-result');
@@ -2006,8 +2126,18 @@ function inspModalCalc() {
     if (wid > 0) resultText += ` / 폭 ${wid.toFixed(1)} mm`;
     if (cnt > 1)  resultText += ` / ${cnt}개소`;
   } else if (t.id === 'other') {
-    const qty = get('qty'), cnt = get('count');
-    if (qty > 0) resultText = `수량 ${qty}개`;
+    const unitType = document.getElementById('insp-f-otherUnit')?.value || 'count';
+    const cnt = get('count');
+    if (unitType === 'count') {
+      const qty = get('qty');
+      if (qty > 0) resultText = `수량 ${qty}개`;
+    } else if (unitType === 'area') {
+      const len = get('length'), wid = get('width');
+      if (len > 0 && wid > 0) resultText = `면적 ${(len*wid).toFixed(3)}m²`;
+    } else if (unitType === 'length') {
+      const len = get('length');
+      if (len > 0) resultText = `연장 ${len.toFixed(2)}m`;
+    }
     if (cnt > 0) resultText += ` / ${cnt}개소`;
   } else {
     // 면적 손상
@@ -2033,8 +2163,22 @@ function inspModalConfirm() {
     length = get('length');
     meta   = { width: get('width'), count: get('count') || 1 };
   } else if (t.id === 'other') {
-    meta = { qty: get('qty'), count: get('count'), customLabel: getStr('customLabel') };
-    area = get('qty');
+    const unitType = document.getElementById('insp-f-otherUnit')?.value || 'count';
+    const customLabel = getStr('customLabel');
+    const cnt = get('count');
+    if (unitType === 'count') {
+      const qty = get('qty');
+      meta = { qty, count: cnt, customLabel, otherUnit: 'count' };
+      area = qty;
+    } else if (unitType === 'area') {
+      const len = get('length'), wid = get('width');
+      meta = { length: len, width: wid, count: cnt, customLabel, otherUnit: 'area' };
+      area = parseFloat((len * wid).toFixed(4));
+    } else if (unitType === 'length') {
+      const len = get('length');
+      meta = { length: len, count: cnt, customLabel, otherUnit: 'length' };
+      length = len;
+    }
   } else {
     const len = get('length'), wid = get('width');
     area  = parseFloat((len * wid).toFixed(4));
@@ -2330,6 +2474,34 @@ function _inspHideEditPanel() {
   const panel = document.getElementById('insp-edit-panel');
   if (panel) panel.classList.remove('show');
   document.getElementById('insp-edit-rotate-ctrl').style.display = 'none';
+  // 이동 모드 해제
+  if (_inspMoveMode) {
+    _inspMoveMode = false;
+    _inspMoveDragStart = null; _inspMoveOrigPts = null;
+    document.getElementById('insp-draw-canvas').style.cursor = '';
+  }
+}
+
+// 이동 모드 상태
+let _inspMoveMode = false;
+let _inspMoveDragStart = null;
+let _inspMoveOrigPts   = null;
+
+function inspEditMoveMode() {
+  if (_inspSelectedIdx === null) return;
+  _inspMoveMode = !_inspMoveMode;
+  const btn = document.getElementById('insp-edit-move-btn');
+  if (_inspMoveMode) {
+    btn.style.borderColor = 'var(--accent)';
+    btn.style.color = 'var(--accent)';
+    btn.textContent = '⤢ 이동 중...';
+    document.getElementById('insp-draw-canvas').style.cursor = 'move';
+  } else {
+    btn.style.borderColor = ''; btn.style.color = '';
+    btn.textContent = '⤢ 이동';
+    document.getElementById('insp-draw-canvas').style.cursor = '';
+    _inspMoveDragStart = null; _inspMoveOrigPts = null;
+  }
 }
 
 // 다시 그리기 — 기존 손상 제거 후 같은 번호로 재등록
