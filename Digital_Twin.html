@@ -2027,20 +2027,20 @@ function inspModalOpen(damageType, withoutDraw, editMeta) {
 
     // 단위 유형에 맞는 필드 렌더링
     inspOtherUnitSelect(existUnit, editMeta);
-    return;  // 아래 fields 루프 skip
+    // fields 루프 skip하고 공통 마무리로 fall-through
+  } else {
+    damageType.fields.forEach(f => {
+      const row = document.createElement('div');
+      row.className = 'insp-modal-field';
+      const existVal = editMeta && editMeta[f.key] != null ? editMeta[f.key] : '';
+      row.innerHTML = `
+        <label>${f.label}</label>
+        <input type="number" id="insp-f-${f.key}" min="0" step="0.01"
+          placeholder="${f.placeholder}" value="${existVal}" oninput="inspModalCalc()">
+        <span class="insp-modal-unit">${f.unit}</span>`;
+      fieldsEl.appendChild(row);
+    });
   }
-
-  damageType.fields.forEach(f => {
-    const row = document.createElement('div');
-    row.className = 'insp-modal-field';
-    const existVal = editMeta && editMeta[f.key] != null ? editMeta[f.key] : '';
-    row.innerHTML = `
-      <label>${f.label}</label>
-      <input type="number" id="insp-f-${f.key}" min="0" step="0.01"
-        placeholder="${f.placeholder}" value="${existVal}" oninput="inspModalCalc()">
-      <span class="insp-modal-unit">${f.unit}</span>`;
-    fieldsEl.appendChild(row);
-  });
 
   resultEl.textContent = '—';
   overlay.classList.add('show');
