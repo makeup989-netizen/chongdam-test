@@ -1529,6 +1529,10 @@ function inspClose() {
 /* 엔트리 선택 → 이미지 로드 */
 function inspSelectEntry(entry) {
   inspCurrentEntry = entry;
+  // 새 부재 선택 시 줌/패닝 리셋
+  _inspZoom = 1.0; _inspPanX = 0; _inspPanY = 0;
+  _inspSelectedIdx = null;
+  _inspHideEditPanel();
 
   // 부재 목록 표시
   const memberList = document.getElementById('insp-member-list');
@@ -2102,13 +2106,13 @@ function inspOtherUnitSelect(unitType, editMeta) {
         <span class="insp-modal-unit">m</span>
       </div>`;
   }
-  // 현재 선택된 단위 유형 저장 (hidden)
+  // 현재 선택된 단위 유형 저장 (hidden) - fieldsDiv 안에 유지
   let hiddenInput = document.getElementById('insp-f-otherUnit');
   if (!hiddenInput) {
     hiddenInput = document.createElement('input');
     hiddenInput.type = 'hidden';
     hiddenInput.id = 'insp-f-otherUnit';
-    document.getElementById('insp-other-fields').parentNode.appendChild(hiddenInput);
+    fieldsDiv.appendChild(hiddenInput);
   }
   hiddenInput.value = unitType;
   inspModalCalc();
@@ -2198,7 +2202,7 @@ function inspModalConfirm() {
     _inspEditIdx = null;
   } else {
     // 신규 추가
-    const pts = (_inspPendingPts && _inspPendingPts.length >= 2) ? _inspPendingPts : [];
+    const pts = (_inspPendingPts && _inspPendingPts.length >= 2) ? _inspPendingPts : (_inspPendingPts || []);
     inspDamages[key].push({
       id: 'dmg_' + (inspNextId++),
       type: t.id, pts, area, length, meta,
@@ -2247,12 +2251,14 @@ function inspRedraw() {
   const damages = inspDamages[inspCurrentEntry.imageFile] || [];
   damages.forEach((d, idx) => {
     const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
-    if (!t || d.pts.length < 2) return;
-    const isSelected = _inspSelectedIdx === idx;
-    const canvasPts = _ptsToCanvas(d.pts);
-    inspDrawShape(ctx, canvasPts, t.color, t.mode, false, isSelected);
-    inspDrawLabel(ctx, { ...d, pts: canvasPts }, t, idx + 1);
-    if (isSelected && d.meta && d.meta._isCircle) inspDrawRotateHandle(ctx, canvasPts, d.meta._rotation || 0);
+    if (!t) return;
+    if (d.pts && d.pts.length >= 2) {
+      const isSelected = _inspSelectedIdx === idx;
+      const canvasPts = _ptsToCanvas(d.pts);
+      inspDrawShape(ctx, canvasPts, t.color, t.mode, false, isSelected);
+      inspDrawLabel(ctx, { ...d, pts: canvasPts }, t, idx + 1);
+      if (isSelected && d.meta && d.meta._isCircle) inspDrawRotateHandle(ctx, canvasPts, d.meta._rotation || 0);
+    }
   });
   // 실시간 손상물량표 오버레이
   if (damages.length > 0) inspDrawDamageTable(ctx, dc.width, dc.height, damages);
