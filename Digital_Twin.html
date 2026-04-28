@@ -375,7 +375,8 @@
     align-items: center; justify-content: center;
     color: var(--textMut); font-family: var(--mono);
     font-size: 12px; gap: 10px; 
-    pointer-events: auto;
+    /* 오버레이가 떠 있어도 캔버스/툴바 입력은 계속 가능해야 함 */
+    pointer-events: none;
     letter-spacing: .06em;
     background: rgba(8,12,20,0.8);
     z-index: 50;
