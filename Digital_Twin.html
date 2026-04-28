@@ -2175,11 +2175,12 @@ function inspModalConfirm() {
     }
     _inspEditIdx = null;
   } else {
-    // 신규 추가
+    // 신규 추가 — drawMode 저장 (렌더링 시 polyline/polygon 구분에 사용)
     const pts = (_inspPendingPts && _inspPendingPts.length >= 2) ? _inspPendingPts : [];
     inspDamages[key].push({
-   id: 'dmg_' + (inspNextId++),
-   type: t.id, pts, area, length, meta,
+      id: 'dmg_' + (inspNextId++),
+      type: t.id, pts, area, length, meta,
+      drawMode: inspDrawMode,   // 'line' | 'curve' | 'rect' | 'circle'
     });
   }
 
@@ -2227,11 +2228,13 @@ function inspRedraw() {
     const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
     if (!t) return;
     if (d.pts && d.pts.length >= 2) {
-   const isSelected = _inspSelectedIdx === idx;
-   const canvasPts = _ptsToCanvas(d.pts);
-   inspDrawShape(ctx, canvasPts, t.color, t.mode, false, isSelected);
-   inspDrawLabel(ctx, { ...d, pts: canvasPts }, t, idx + 1);
-   if (isSelected && d.meta && d.meta._isCircle) inspDrawRotateHandle(ctx, canvasPts, d.meta._rotation || 0);
+      const isSelected = _inspSelectedIdx === idx;
+      const canvasPts = _ptsToCanvas(d.pts);
+      // drawMode가 line/curve면 polyline으로 렌더링 (폐합 안 함)
+      const renderMode = (d.drawMode === 'line' || d.drawMode === 'curve') ? 'polyline' : t.mode;
+      inspDrawShape(ctx, canvasPts, t.color, renderMode, false, isSelected);
+      inspDrawLabel(ctx, { ...d, pts: canvasPts }, t, idx + 1);
+      if (isSelected && d.meta && d.meta._isCircle) inspDrawRotateHandle(ctx, canvasPts, d.meta._rotation || 0);
     }
   });
   // 실시간 손상물량표 오버레이
