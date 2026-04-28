@@ -284,13 +284,7 @@
   #insp-close-btn:hover { border-color: var(--danger); color: var(--danger); }
 
   /* 본문: 좌측 목록 | 중앙 캔버스 | 우측 이력 */
-  #insp-body { 
-    display: flex;
-    flex: 1 1 auto;
-    overflow: hidden;
-    min-height: 0;
-    width: 100%;
-  }
+  #insp-body { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 
   /* 좌측 부재 목록 */
   #insp-member-list {
@@ -320,14 +314,7 @@
   .insp-member-btn.active { border-left-color: var(--accent); color: var(--accent); background: rgba(0,229,204,.06); }
 
   /* 중앙 영역 */
-  #insp-center { 
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    min-width: 0;
-    min-height: 0;
-  }
+  #insp-center { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
 
   /* 툴바 */
   #insp-toolbar {
@@ -357,34 +344,44 @@
     position: relative; flex: 1 1 auto;
     overflow: hidden; background: #080C14;
     cursor: crosshair; min-height: 0;
-    display: flex;
-    align-items: stretch;
-    justify-content: stretch;
   }
   #insp-img-canvas, #insp-draw-canvas {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    pointer-events: auto;
-    display: block;
-  }
-  #insp-draw-canvas {
-    z-index: 5;
   }
   #insp-overlay {
     position: absolute; inset: 0;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     color: var(--textMut); font-family: var(--mono);
-    font-size: 12px; gap: 10px; 
-    /* 오버레이가 떠 있어도 캔버스/툴바 입력은 계속 가능해야 함 */
-    pointer-events: none;
-    letter-spacing: .06em;
-    background: rgba(8,12,20,0.8);
-    z-index: 50;
+    font-size: 12px; gap: 10px; pointer-events: none; letter-spacing: .06em;
   }
-  #insp-overlay.hidden {
+
+  /* 손상 선택/편집 패널 */
+  #insp-edit-panel {
     display: none;
-    pointer-events: none;
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin: 0 0 8px 0;
+    font-family: var(--mono);
+    font-size: 11px;
   }
+  #insp-edit-panel.show { display: block; }
+  .insp-edit-title {
+    color: var(--accent); font-size: 10px; letter-spacing: .08em;
+    margin-bottom: 8px;
+  }
+  .insp-edit-btns { display: flex; gap: 5px; flex-wrap: wrap; }
+  .insp-edit-btn {
+    flex: 1; padding: 5px 4px;
+    border: 1px solid var(--border); border-radius: 3px;
+    background: transparent; color: var(--textMut);
+    font-family: var(--mono); font-size: 10px;
+    cursor: pointer; transition: all .15s; text-align: center;
+  }
+  .insp-edit-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .insp-edit-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
 
   /* 우측 손상이력 */
   #insp-history {
@@ -642,28 +639,23 @@
     <!-- 중앙: 툴바 + 캔버스 -->
     <div id="insp-center">
       <div id="insp-toolbar">
-        <button class="insp-tool-btn active" id="insp-mode-polygon"  onclick="inspSetMode('polygon')">꼭짓점</button>
-        <button class="insp-tool-btn"        id="insp-mode-freehand" onclick="inspSetMode('freehand')">자유형</button>
+        <button class="insp-tool-btn active" id="insp-mode-line"     onclick="inspSetMode('line')">직선</button>
+        <button class="insp-tool-btn"        id="insp-mode-curve"    onclick="inspSetMode('curve')">곡선</button>
+        <button class="insp-tool-btn"        id="insp-mode-rect"     onclick="inspSetMode('rect')">사각형</button>
+        <button class="insp-tool-btn"        id="insp-mode-circle"   onclick="inspSetMode('circle')">원형</button>
         <div class="insp-sep"></div>
         <div id="insp-type-btns" style="display:contents;"></div>
-        <div class="insp-sep"></div>
-        <span style="font-size:10px;color:var(--textMut);font-family:var(--mono);">1px=</span>
-        <input class="insp-scale-input" id="insp-scale" type="number"
-          value="0.01" min="0.0001" step="0.001"
-          title="1픽셀 = N 미터"
-          onchange="inspScaleChange(this.value)">
-        <span style="font-size:10px;color:var(--textMut);font-family:var(--mono);">m</span>
         <div class="insp-sep"></div>
         <button class="insp-tool-btn" onclick="inspUndo()" title="실행취소">↩ 실행취소</button>
         <button class="insp-tool-btn" onclick="inspClearAll()" title="전체삭제">🗑 전체삭제</button>
         <div class="insp-sep"></div>
+        <button class="insp-tool-btn" onclick="inspZoomReset()" title="줌 초기화 (100%)">⊙ 초기화</button>
+        <span id="insp-zoom-label" style="font-size:10px;color:var(--textMut);font-family:var(--mono);min-width:38px;text-align:center;">100%</span>
+        <div class="insp-sep"></div>
         <button class="insp-tool-btn" onclick="inspExportJSON()">💾 JSON</button>
         <button class="insp-tool-btn" onclick="inspExportPNG()">🖼 PNG</button>
         <button class="insp-tool-btn" onclick="inspExportCSV()">📊 CSV</button>
-        <div class="insp-sep"></div>
-        <button class="insp-tool-btn" id="insp-table-set-btn"
-          onclick="inspTableSetStart()"
-          title="손상물량표 영역을 클릭으로 지정합니다">📐 표 위치 설정</button>
+
       </div>
       <div id="insp-canvas-wrap">
         <canvas id="insp-img-canvas"></canvas>
@@ -672,17 +664,31 @@
           <div style="font-size:28px;">🗺️</div>
           <div id="insp-overlay-msg">부재를 클릭하면 외관조사망도가 표시됩니다</div>
         </div>
-        <!-- 표 위치 설정 안내 오버레이 -->
-        <div id="insp-table-guide">
-          <div id="insp-table-guide-msg">① 손상물량표 좌상단을 클릭하세요</div>
-          <div id="insp-table-preview"></div>
-        </div>
+
       </div>
     </div>
 
     <!-- 우측: 손상이력 -->
     <div id="insp-history">
       <div id="insp-history-header">DAMAGE HISTORY</div>
+      <!-- 선택된 손상 편집 패널 -->
+      <div id="insp-edit-panel">
+        <div class="insp-edit-title" id="insp-edit-title">● 손상 선택됨</div>
+        <div class="insp-edit-btns">
+          <button class="insp-edit-btn" onclick="inspEditRedraw()">✏ 다시 그리기</button>
+          <button class="insp-edit-btn" onclick="inspEditMeta()">📝 수치 수정</button>
+          <button class="insp-edit-btn" id="insp-edit-move-btn" onclick="inspEditMoveMode()">⤢ 이동</button>
+          <button class="insp-edit-btn" id="insp-edit-rotate-btn" onclick="inspEditRotateMode()" style="display:none;">↻ 회전</button>
+          <button class="insp-edit-btn danger" onclick="inspEditDelete()">✕ 삭제</button>
+        </div>
+        <div id="insp-edit-rotate-ctrl" style="display:none;margin-top:8px;">
+          <div style="color:var(--textMut);font-size:10px;margin-bottom:4px;">회전 각도</div>
+          <input type="range" min="0" max="360" value="0" id="insp-edit-rotate-slider"
+            style="width:100%;accent-color:var(--accent);"
+            oninput="inspEditRotate(this.value)">
+          <div style="text-align:center;color:var(--accent);font-size:10px;" id="insp-edit-rotate-val">0°</div>
+        </div>
+      </div>
       <div id="insp-summary"></div>
       <div id="insp-table-wrap">
         <table id="insp-table">
@@ -1428,7 +1434,8 @@ const INSP_DAMAGE_TYPES = [
     fields: [
       { key:'qty',   label:'수량', unit:'개', placeholder:'1'    },
       { key:'count', label:'개소', unit:'개', placeholder:'1'    },
-    ]
+    ],
+    hasCustomLabel: true,
   },
 ];
 
@@ -1437,9 +1444,11 @@ let inspDamages      = {};     // { imageFile: [{id,type,pts,area,length},...] }
 let inspCurrentEntry = null;   // 현재 표시 중인 매핑 엔트리
 let inspScaleM       = 0.01;
 let inspNextId       = 1;
-let inspDrawMode     = 'polygon';
+let inspDrawMode     = 'line';
 let inspDrawType     = INSP_DAMAGE_TYPES[0];
 let inspDrawing      = false;
+let _inspSelectedIdx = null;   // 현재 선택된 손상 인덱스
+let _inspRotation    = 0;      // 원형 회전 각도 (라디안)
 let inspCurrentPts   = [];
 let inspFreehandPts  = [];
 let inspLastTap      = 0;
@@ -1491,16 +1500,11 @@ function inspOpen(entry) {
   const fs = document.getElementById('insp-fullscreen');
   fs.classList.add('show');
 
-  // 이전 작업에서 표 위치 설정 가이드가 남아있으면 입력이 잠기므로 항상 초기화
-  inspTableSetEnd();
-
   // 오픈 시 hover 정리 (3D 캔버스가 덮이면서 mouseleave 미발생)
   clearHover();
 
   // 전체화면 렌더링 완료 후 캔버스 크기 확정 → 이미지 로드
-  // 레이아웃 계산을 위해 여러 프레임 기다리기
   requestAnimationFrame(() => {
-    inspSyncSize();
     requestAnimationFrame(() => {
       inspSyncSize();
       if (entry) inspSelectEntry(entry);
@@ -1511,8 +1515,6 @@ function inspOpen(entry) {
 
 /* 전체화면 닫기 → Digital Twin 복귀 */
 function inspClose() {
-  // 닫을 때도 가이드 모드를 정리해 다음 오픈에서 입력 잠김 방지
-  inspTableSetEnd();
   document.getElementById('insp-fullscreen').classList.remove('show');
   // 조사 탭 버튼 비활성화
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -1527,6 +1529,10 @@ function inspClose() {
 /* 엔트리 선택 → 이미지 로드 */
 function inspSelectEntry(entry) {
   inspCurrentEntry = entry;
+  // 새 부재 선택 시 줌/패닝 리셋
+  _inspZoom = 1.0; _inspPanX = 0; _inspPanY = 0;
+  _inspSelectedIdx = null;
+  _inspHideEditPanel();
 
   // 부재 목록 표시
   const memberList = document.getElementById('insp-member-list');
@@ -1541,14 +1547,12 @@ function inspSelectEntry(entry) {
   const imgCanvas = document.getElementById('insp-img-canvas');
   const overlay   = document.getElementById('insp-overlay');
   const msgEl     = document.getElementById('insp-overlay-msg');
-  overlay.classList.remove('hidden');
   overlay.style.display = 'flex';
   msgEl.textContent = '이미지 로딩 중...';
 
   const img = new Image();
   img.onload = () => {
     inspImgEl = img;
-    overlay.classList.add('hidden');
     overlay.style.display = 'none';
     // 레이아웃 확정 후 캔버스 크기 재측정 → 이미지가 항상 전체 영역에 꽉 차게
     requestAnimationFrame(() => {
@@ -1560,7 +1564,6 @@ function inspSelectEntry(entry) {
   };
   img.onerror = () => {
     msgEl.textContent = `이미지를 불러올 수 없습니다: ${entry.imageFile}`;
-    overlay.style.display = 'flex';
   };
   img.src = INSP_BASE + encodeURIComponent(entry.imageFile) + '?_=' + Date.now();
 }
@@ -1568,164 +1571,406 @@ function inspSelectEntry(entry) {
 /* 캔버스 크기 동기화 — DPR 적용으로 고해상도 렌더링 */
 const INSP_DPR = Math.min(window.devicePixelRatio || 1, 3);
 
+// ── 줌 / 패닝 상태 ──
+let _inspZoom   = 1.0;    // 배율 (1.0 = 원본)
+let _inspPanX   = 0;      // 패닝 X (canvas px)
+let _inspPanY   = 0;      // 패닝 Y (canvas px)
+let _inspPanning = false;
+let _inspPanStart = null;
+
 function inspSyncSize() {
   const wrap = document.getElementById('insp-canvas-wrap');
   const w = wrap.clientWidth  || 280;
   const h = wrap.clientHeight || 300;
-  
   ['insp-img-canvas', 'insp-draw-canvas'].forEach(id => {
     const c = document.getElementById(id);
-    if (!c) return;
     c.width  = Math.round(w * INSP_DPR);
     c.height = Math.round(h * INSP_DPR);
     c.style.width  = w + 'px';
     c.style.height = h + 'px';
-    c.style.pointerEvents = 'auto';  // 마우스 이벤트 활성화
-    c.style.display = 'block';       // 캔버스 표시 확인
   });
-  
   if (inspImgEl) { inspDrawImg(); inspRedraw(); }
 }
 
-/* 이미지 그리기 — imageSmoothingQuality high로 선명도 최대화 */
+/* 이미지 그리기 — 줌/패닝 포함 */
 function inspDrawImg() {
   if (!inspImgEl) return;
   const c   = document.getElementById('insp-img-canvas');
   const ctx = c.getContext('2d');
   const W = c.width, H = c.height;
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = '#f0f0f0';
   ctx.fillRect(0, 0, W, H);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  const sc = Math.min(W / inspImgEl.naturalWidth, H / inspImgEl.naturalHeight);
-  const dw = inspImgEl.naturalWidth  * sc;
-  const dh = inspImgEl.naturalHeight * sc;
-  const dx = (W - dw) / 2;
-  const dy = (H - dh) / 2;
+
+  // 기본 스케일 (fit)
+  const scBase = Math.min(W / inspImgEl.naturalWidth, H / inspImgEl.naturalHeight);
+  const sc  = scBase * _inspZoom;
+  const dw  = inspImgEl.naturalWidth  * sc;
+  const dh  = inspImgEl.naturalHeight * sc;
+  // 줌 기준: 중앙 + 패닝 오프셋
+  const dx  = (W - dw) / 2 + _inspPanX;
+  const dy  = (H - dh) / 2 + _inspPanY;
   inspImgDrawRect = { dx, dy, dw, dh, sc };
   ctx.drawImage(inspImgEl, dx, dy, dw, dh);
+  // 줌 레벨 표시 업데이트
+  const zl = document.getElementById('insp-zoom-label');
+  if (zl) zl.textContent = Math.round(_inspZoom * 100) + '%';
+}
+
+/* 줌 리셋 */
+function inspZoomReset() {
+  _inspZoom = 1.0; _inspPanX = 0; _inspPanY = 0;
+  inspDrawImg(); inspRedraw();
 }
 
 /* 좌표 */
 /* 클릭 좌표 → 캔버스 내부 좌표 (DPR 배율 적용) */
+// canvas px → 이미지 비율 좌표 (0~1) 변환
+// 저장은 항상 이미지 비율로, 그릴 때 canvas px로 역변환
+function _canvasPxToRatio(cx, cy) {
+  const idr = inspImgDrawRect;
+  if (!idr) return { x: 0, y: 0 };
+  return {
+    x: (cx - idr.dx) / idr.dw,
+    y: (cy - idr.dy) / idr.dh,
+  };
+}
+// 이미지 비율 → canvas px 변환
+function _ratioToCanvasPx(rx, ry) {
+  const idr = inspImgDrawRect;
+  if (!idr) return { x: 0, y: 0 };
+  return {
+    x: idr.dx + rx * idr.dw,
+    y: idr.dy + ry * idr.dh,
+  };
+}
+// pts 배열 변환 헬퍼
+function _ptsToCanvas(pts) {
+  return pts.map(p => _ratioToCanvasPx(p.x, p.y));
+}
+
 function inspPt(e) {
   const r = document.getElementById('insp-draw-canvas').getBoundingClientRect();
-  return {
-    x: (e.clientX - r.left) * INSP_DPR,
-    y: (e.clientY - r.top)  * INSP_DPR
-  };
+  const cx = (e.clientX - r.left) * INSP_DPR;
+  const cy = (e.clientY - r.top)  * INSP_DPR;
+  return _canvasPxToRatio(cx, cy);  // 비율 좌표로 저장
 }
 function inspPtT(e) {
   const r = document.getElementById('insp-draw-canvas').getBoundingClientRect();
   const t = e.touches[0] || e.changedTouches[0];
-  return {
-    x: (t.clientX - r.left) * INSP_DPR,
-    y: (t.clientY - r.top)  * INSP_DPR
-  };
+  const cx = (t.clientX - r.left) * INSP_DPR;
+  const cy = (t.clientY - r.top)  * INSP_DPR;
+  return _canvasPxToRatio(cx, cy);  // 비율 좌표로 저장
 }
 
 /* 이벤트 바인딩 (DOM 준비 후 1회 실행) */
+// 사각형/원형 첫 클릭 기준점
+let _inspShapeAnchor = null;
+let _inspShapeCurrent = null;
+
 function inspBindEvents() {
   const dc = document.getElementById('insp-draw-canvas');
-  if (!dc) {
-    console.error('[외관조사망도] insp-draw-canvas 요소를 찾을 수 없습니다');
-    return;
-  }
 
-  // 마우스 — 꼭짓점
+  // ── 마우스 DOWN ──
   dc.addEventListener('mousedown', e => {
-    if (!inspImgEl || inspDrawMode !== 'polygon') return;
-    if (e.button !== 0) return;  // 좌클릭만 점 추가
+    if (!inspImgEl) return;
+    if (e.button !== 0) return;
     e.stopPropagation();
     const p = inspPt(e);
-    if (!inspDrawing) { inspDrawing = true; inspCurrentPts = [p]; }
-    else              { inspCurrentPts.push(p); }
+
+    // 이동 모드: 드래그 시작
+    if (_inspMoveMode && _inspSelectedIdx !== null) {
+      const key = inspCurrentEntry?.imageFile;
+      const d = inspDamages[key]?.[_inspSelectedIdx];
+      if (d) {
+        _inspMoveDragStart = p;
+        _inspMoveOrigPts = d.pts.map(pt => ({ ...pt }));
+      }
+      return;
+    }
+
+    // 그리는 중이 아닐 때: 기존 손상 클릭 선택 체크
+    if (!inspDrawing && !_inspMoveMode && inspCurrentEntry) {
+      const damages = inspDamages[inspCurrentEntry.imageFile] || [];
+      let hit = -1;
+      for (let i = damages.length - 1; i >= 0; i--) {
+        // pts가 없는 손상은 히트 테스트 제외
+        if (!damages[i].pts || damages[i].pts.length < 2) continue;
+        if (_inspHitTest(p, damages[i])) { hit = i; break; }
+      }
+      if (hit >= 0) {
+        _inspSelectedIdx = (_inspSelectedIdx === hit) ? null : hit;
+        inspRedraw();
+        // 선택 시 수정 패널 표시
+        if (_inspSelectedIdx !== null) _inspShowEditPanel(damages[hit], hit);
+        else _inspHideEditPanel();
+        return;
+      } else if (_inspSelectedIdx !== null) {
+        // 빈 곳 클릭 → 선택 해제
+        _inspSelectedIdx = null;
+        _inspHideEditPanel();
+        inspRedraw();
+      }
+    }
+
+    if (inspDrawMode === 'line') {
+      // 직선: 첫 클릭 → 시작점, 두 번째 클릭 → 완료
+      if (!inspDrawing) { inspDrawing = true; inspCurrentPts = [p]; }
+      else { inspCurrentPts.push(p); inspFinish(); }
+
+    } else if (inspDrawMode === 'curve') {
+      // 곡선: mousedown으로 시작
+      inspDrawing = true; inspFreehandPts = [p];
+
+    } else if (inspDrawMode === 'rect' || inspDrawMode === 'circle') {
+      if (!inspDrawing) {
+        // 첫 클릭: 기준점 설정
+        inspDrawing = true;
+        _inspShapeAnchor = p;
+        _inspShapeCurrent = p;
+      } else {
+        // 두 번째 클릭: 확정
+        inspCurrentPts = _inspShapeToPoints(_inspShapeAnchor, _inspShapeCurrent);
+        _inspShapeAnchor = null; _inspShapeCurrent = null;
+        inspFinish();
+      }
+    }
     inspRedraw();
   });
+
+  // ── 마우스 MOVE ──
   dc.addEventListener('mousemove', e => {
-    if (inspDrawing && inspDrawMode === 'polygon') inspRedrawPreview(inspPt(e));
-  });
-  dc.addEventListener('dblclick', e => {
-    e.preventDefault();
-    if (inspDrawing && inspDrawMode === 'polygon') inspFinish();
-  });
-  dc.addEventListener('contextmenu', e => {
-    e.preventDefault();
-    // 우클릭 완료 — 마우스 현재 위치 무시, 마지막 클릭 점까지만 사용
-    if (inspDrawing && inspDrawMode === 'polygon') inspFinish();
+    const p = inspPt(e);
+
+    // 이동 모드: 드래그로 손상 이동
+    if (_inspMoveMode && _inspMoveDragStart && _inspMoveOrigPts && _inspSelectedIdx !== null) {
+      const dx = p.x - _inspMoveDragStart.x;
+      const dy = p.y - _inspMoveDragStart.y;
+      const key = inspCurrentEntry?.imageFile;
+      const d = inspDamages[key]?.[_inspSelectedIdx];
+      if (d) {
+        d.pts = _inspMoveOrigPts.map(pt => ({ x: pt.x + dx, y: pt.y + dy }));
+        inspRedraw();
+      }
+      return;
+    }
+
+    if (!inspDrawing) return;
+
+    if (inspDrawMode === 'line') {
+      inspRedrawPreview(p);
+    } else if (inspDrawMode === 'curve') {
+      inspFreehandPts.push(p);
+      inspRedrawPreview(null);
+    } else if (inspDrawMode === 'rect' || inspDrawMode === 'circle') {
+      _inspShapeCurrent = p;
+      inspRedrawShapePreview();
+    }
   });
 
-  // ESC → 현재 그리던 것 취소
+  // ── 마우스 UP ──
+  dc.addEventListener('mouseup', e => {
+    // 이동 모드 드래그 완료
+    if (_inspMoveMode && _inspMoveDragStart) {
+      _inspMoveDragStart = null;
+      _inspMoveOrigPts = null;
+      inspRenderHistory();
+      return;
+    }
+    if (!inspDrawing) return;
+    if (inspDrawMode === 'curve' && inspFreehandPts.length > 1) {
+      inspFinish();
+    }
+  });
+
+  // ── 우클릭: 취소 ──
+  dc.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    if (inspDrawing) { inspResetDraw(); inspRedraw(); }
+  });
+
+  // ── ESC ──
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     const fs = document.getElementById('insp-fullscreen');
     if (!fs || !fs.classList.contains('show')) return;
-    // 모달 열려있으면 모달 닫기
     const modal = document.getElementById('insp-modal-overlay');
     if (modal && modal.classList.contains('show')) { inspModalCancel(); return; }
-    // 그리는 중이면 취소
-    if (inspDrawing) { inspResetDraw(); inspRedraw(); }
+    if (inspDrawing) {
+      _inspShapeAnchor = null; _inspShapeCurrent = null;
+      inspResetDraw(); inspRedraw();
+    }
   });
 
-  // 마우스 — 프리핸드
-  dc.addEventListener('mousedown', e => {
-    if (!inspImgEl || inspDrawMode !== 'freehand') return;
-    e.stopPropagation();
-    inspDrawing = true; inspFreehandPts = [inspPt(e)];
-  });
-  dc.addEventListener('mousemove', e => {
-    if (!inspDrawing || inspDrawMode !== 'freehand') return;
-    inspFreehandPts.push(inspPt(e));
-    inspRedrawPreview(null);
-  });
-  dc.addEventListener('mouseup', () => {
-    if (inspDrawing && inspDrawMode === 'freehand') inspFinish();
-  });
-
-  // 터치
+  // ── 터치 ──
   dc.addEventListener('touchstart', e => {
     if (!inspImgEl) return;
     e.preventDefault(); e.stopPropagation();
     const p = inspPtT(e);
-    if (inspDrawMode === 'polygon') {
+    if (inspDrawMode === 'line') {
       if (!inspDrawing) { inspDrawing = true; inspCurrentPts = [p]; }
-      else              { inspCurrentPts.push(p); }
-      const now = Date.now();
-      if (now - inspLastTap < 300) inspFinish();
-      inspLastTap = now;
-      inspRedraw();
-    } else {
+      else { inspCurrentPts.push(p); inspFinish(); }
+    } else if (inspDrawMode === 'curve') {
       inspDrawing = true; inspFreehandPts = [p];
+    } else if (inspDrawMode === 'rect' || inspDrawMode === 'circle') {
+      if (!inspDrawing) { inspDrawing = true; _inspShapeAnchor = p; _inspShapeCurrent = p; }
+      else {
+        inspCurrentPts = _inspShapeToPoints(_inspShapeAnchor, _inspShapeCurrent);
+        _inspShapeAnchor = null; _inspShapeCurrent = null;
+        inspFinish();
+      }
     }
+    inspRedraw();
   }, { passive: false });
+
   dc.addEventListener('touchmove', e => {
     if (!inspDrawing) return;
     e.preventDefault();
     const p = inspPtT(e);
-    if (inspDrawMode === 'freehand') { inspFreehandPts.push(p); inspRedrawPreview(null); }
-    else { inspRedrawPreview(p); }
+    if (inspDrawMode === 'curve') { inspFreehandPts.push(p); inspRedrawPreview(null); }
+    else if (inspDrawMode === 'line') { inspRedrawPreview(p); }
+    else if (inspDrawMode === 'rect' || inspDrawMode === 'circle') {
+      _inspShapeCurrent = p; inspRedrawShapePreview();
+    }
   }, { passive: false });
+
   dc.addEventListener('touchend', () => {
-    if (inspDrawing && inspDrawMode === 'freehand') inspFinish();
+    if (inspDrawing && inspDrawMode === 'curve' && inspFreehandPts.length > 1) inspFinish();
   });
+
+  // ── 휠: 줌 (Ctrl 없이도 작동) ──
+  dc.addEventListener('wheel', e => {
+    e.preventDefault();
+    if (!inspImgEl) return;
+    const rect = dc.getBoundingClientRect();
+    // 마우스 위치 기준 줌
+    const mouseX = (e.clientX - rect.left) * INSP_DPR;
+    const mouseY = (e.clientY - rect.top)  * INSP_DPR;
+
+    const zoomFactor = e.deltaY < 0 ? 1.12 : 0.89;
+    const newZoom = Math.max(0.2, Math.min(20, _inspZoom * zoomFactor));
+
+    // 마우스 위치 기준으로 패닝 보정
+    const W = dc.width, H = dc.height;
+    const scBase = Math.min(W / inspImgEl.naturalWidth, H / inspImgEl.naturalHeight);
+    const oldSc = scBase * _inspZoom;
+    const newSc = scBase * newZoom;
+    _inspPanX += (mouseX - W/2 - _inspPanX) * (1 - newSc / oldSc);
+    _inspPanY += (mouseY - H/2 - _inspPanY) * (1 - newSc / oldSc);
+    _inspZoom = newZoom;
+    inspDrawImg(); inspRedraw();
+  }, { passive: false });
+
+  // ── 중간 버튼 or Space+드래그: 패닝 ──
+  dc.addEventListener('mousedown', e => {
+    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+      e.preventDefault();
+      _inspPanning = true;
+      _inspPanStart = { x: e.clientX - _inspPanX / INSP_DPR, y: e.clientY - _inspPanY / INSP_DPR };
+    }
+  });
+  window.addEventListener('mousemove', e => {
+    if (!_inspPanning || !_inspPanStart) return;
+    _inspPanX = (e.clientX - _inspPanStart.x) * INSP_DPR;
+    _inspPanY = (e.clientY - _inspPanStart.y) * INSP_DPR;
+    inspDrawImg(); inspRedraw();
+  });
+  window.addEventListener('mouseup', e => {
+    if (e.button === 1 || _inspPanning) { _inspPanning = false; _inspPanStart = null; }
+  });
+
+  // ── 터치 핀치 줌 ──
+  let _pinchDist = null;
+  dc.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      _pinchDist = Math.sqrt(dx*dx + dy*dy);
+    }
+  }, { passive: true });
+  dc.addEventListener('touchmove', e => {
+    if (e.touches.length === 2 && _pinchDist) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const newDist = Math.sqrt(dx*dx + dy*dy);
+      _inspZoom = Math.max(0.2, Math.min(20, _inspZoom * (newDist / _pinchDist)));
+      _pinchDist = newDist;
+      inspDrawImg(); inspRedraw();
+    }
+  }, { passive: false });
+  dc.addEventListener('touchend', () => { _pinchDist = null; });
 
   // 캔버스 리사이즈
   new ResizeObserver(() => inspSyncSize())
     .observe(document.getElementById('insp-canvas-wrap'));
 }
 
+// 손상 히트 테스트 (클릭 좌표 p가 손상 d 위에 있는지)
+// p는 비율 좌표 (inspPt 반환값)
+function _inspHitTest(p, d) {
+  if (!d.pts || d.pts.length < 2) return false;
+  // 클릭점과 각 꼭짓점의 최소 거리로 판단 (비율 좌표)
+  // bounding box 먼저 체크
+  const xs = d.pts.map(pt => pt.x), ys = d.pts.map(pt => pt.y);
+  const margin = 0.02;  // 비율 기준 여유값
+  if (p.x < Math.min(...xs) - margin || p.x > Math.max(...xs) + margin) return false;
+  if (p.y < Math.min(...ys) - margin || p.y > Math.max(...ys) + margin) return false;
+  // 폴리곤 내부 point-in-polygon
+  let inside = false;
+  for (let i = 0, j = d.pts.length - 1; i < d.pts.length; j = i++) {
+    const xi = d.pts[i].x, yi = d.pts[i].y;
+    const xj = d.pts[j].x, yj = d.pts[j].y;
+    if (((yi > p.y) !== (yj > p.y)) && (p.x < (xj - xi) * (p.y - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+
+// 사각형/원형 → 점 배열 변환
+function _inspShapeToPoints(a, b) {
+  if (inspDrawMode === 'rect') {
+    // 사각형 4꼭짓점
+    return [
+      { x: a.x, y: a.y },
+      { x: b.x, y: a.y },
+      { x: b.x, y: b.y },
+      { x: a.x, y: b.y },
+    ];
+  } else {
+    // 원형 → 다각형 근사 (32각형)
+    const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+    const rx = Math.abs(b.x - a.x) / 2, ry = Math.abs(b.y - a.y) / 2;
+    const pts = [];
+    for (let i = 0; i < 32; i++) {
+      const ang = (i / 32) * Math.PI * 2;
+      pts.push({ x: cx + rx * Math.cos(ang), y: cy + ry * Math.sin(ang) });
+    }
+    return pts;
+  }
+}
+
+// 사각형/원형 미리보기
+function inspRedrawShapePreview() {
+  if (!_inspShapeAnchor || !_inspShapeCurrent) return;
+  inspRedraw();
+  const ratioPts = _inspShapeToPoints(_inspShapeAnchor, _inspShapeCurrent);
+  const canvasPts = _ptsToCanvas(ratioPts);
+  const ctx = document.getElementById('insp-draw-canvas').getContext('2d');
+  inspDrawShape(ctx, canvasPts, inspDrawType.color, 'polygon', true);
+}
+
 /* 드로잉 완료 → 수치 입력 모달 오픈 */
-let _inspPendingPts = null;       // 모달 확인 전 임시 보관
-let _inspPendingDrawMode = null;  // 그리기 완료 시점의 드로잉 모드
+let _inspPendingPts = null;  // 모달 확인 전 임시 보관
 
 function inspFinish() {
-  if (!inspCurrentEntry) return;
-  const pts = inspDrawMode === 'freehand' ? [...inspFreehandPts] : [...inspCurrentPts];
+  if (!inspCurrentEntry) { console.warn('[inspFinish] inspCurrentEntry가 null'); return; }
+  const pts = inspDrawMode === 'curve' ? [...inspFreehandPts] : [...inspCurrentPts];
   inspResetDraw();
   inspRedraw();
-  if (pts.length < 2) return;
+  if (pts.length < 2) { console.warn('[inspFinish] pts 부족:', pts.length); return; }
   _inspPendingPts = pts;
-  _inspPendingDrawMode = inspDrawMode;
+  console.log('[inspFinish] 모달 오픈, pts:', pts.length, 'mode:', inspDrawMode);
   inspModalOpen(inspDrawType);
 }
 function inspResetDraw() {
@@ -1733,27 +1978,76 @@ function inspResetDraw() {
 }
 
 /* ── 수치 입력 모달 ── */
-function inspModalOpen(damageType, withoutDraw) {
+// 수정 모드용 — 수정 중인 손상 idx
+let _inspEditIdx = null;
+
+function inspModalOpen(damageType, withoutDraw, editMeta) {
   // withoutDraw: 손상유형 버튼 직접 클릭 시 true
+  // editMeta: 수정 모드 시 기존 meta 값
   if (withoutDraw) _inspPendingPts = [];
   const overlay = document.getElementById('insp-modal-overlay');
   const titleEl = document.getElementById('insp-modal-title');
   const fieldsEl = document.getElementById('insp-modal-fields');
   const resultEl = document.getElementById('insp-modal-result');
 
-  titleEl.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${damageType.color};margin-right:6px;vertical-align:middle;"></span>${damageType.label} — 수치 입력`;
+  const isEdit = _inspEditIdx !== null;
+  titleEl.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${damageType.color};margin-right:6px;vertical-align:middle;"></span>${damageType.label} — ${isEdit ? '수치 수정' : '수치 입력'}`;
   fieldsEl.innerHTML = '';
 
-  damageType.fields.forEach(f => {
-    const row = document.createElement('div');
-    row.className = 'insp-modal-field';
-    row.innerHTML = `
-      <label>${f.label}</label>
-      <input type="number" id="insp-f-${f.key}" min="0" step="0.01"
-        placeholder="${f.placeholder}" oninput="inspModalCalc()">
-      <span class="insp-modal-unit">${f.unit}</span>`;
-    fieldsEl.appendChild(row);
-  });
+  // 기타: 손상내용 + 단위 선택 + 동적 입력 필드
+  if (damageType.hasCustomLabel) {
+    const existUnit = editMeta?.otherUnit || 'count';  // count/area/length
+
+    fieldsEl.innerHTML = `
+      <div class="insp-modal-field">
+        <label>손상내용</label>
+        <input type="text" id="insp-f-customLabel"
+          style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:3px;font-family:var(--mono);font-size:12px;"
+          placeholder="손상내용 직접 입력" value="${editMeta?.customLabel || ''}">
+        <span class="insp-modal-unit"></span>
+      </div>
+      <div class="insp-modal-field" style="gap:4px;">
+        <label>단위 유형</label>
+        <div style="display:flex;gap:4px;flex:1;">
+          <button type="button" id="insp-other-unit-count"
+            class="insp-edit-btn${existUnit==='count'?' active':''}"
+            style="flex:1;padding:4px;font-size:10px;${existUnit==='count'?'border-color:var(--accent);color:var(--accent);':''}"
+            onclick="inspOtherUnitSelect('count')">개수</button>
+          <button type="button" id="insp-other-unit-area"
+            class="insp-edit-btn${existUnit==='area'?' active':''}"
+            style="flex:1;padding:4px;font-size:10px;${existUnit==='area'?'border-color:var(--accent);color:var(--accent);':''}"
+            onclick="inspOtherUnitSelect('area')">면적</button>
+          <button type="button" id="insp-other-unit-length"
+            class="insp-edit-btn${existUnit==='length'?' active':''}"
+            style="flex:1;padding:4px;font-size:10px;${existUnit==='length'?'border-color:var(--accent);color:var(--accent);':''}"
+            onclick="inspOtherUnitSelect('length')">길이</button>
+        </div>
+        <span class="insp-modal-unit"></span>
+      </div>
+      <div id="insp-other-fields"></div>
+      <div class="insp-modal-field">
+        <label>개소</label>
+        <input type="number" id="insp-f-count" min="0" step="1"
+          placeholder="1" value="${editMeta?.count || ''}" oninput="inspModalCalc()">
+        <span class="insp-modal-unit">개</span>
+      </div>`;
+
+    // 단위 유형에 맞는 필드 렌더링
+    inspOtherUnitSelect(existUnit, editMeta);
+    // fields 루프 skip하고 공통 마무리로 fall-through
+  } else {
+    damageType.fields.forEach(f => {
+      const row = document.createElement('div');
+      row.className = 'insp-modal-field';
+      const existVal = editMeta && editMeta[f.key] != null ? editMeta[f.key] : '';
+      row.innerHTML = `
+        <label>${f.label}</label>
+        <input type="number" id="insp-f-${f.key}" min="0" step="0.01"
+          placeholder="${f.placeholder}" value="${existVal}" oninput="inspModalCalc()">
+        <span class="insp-modal-unit">${f.unit}</span>`;
+      fieldsEl.appendChild(row);
+    });
+  }
 
   resultEl.textContent = '—';
   overlay.classList.add('show');
@@ -1771,6 +2065,62 @@ function inspModalOpen(damageType, withoutDraw) {
   };
 }
 
+// 기타 단위 유형 선택
+function inspOtherUnitSelect(unitType, editMeta) {
+  const fieldsDiv = document.getElementById('insp-other-fields');
+  if (!fieldsDiv) return;
+  // 버튼 활성화
+  ['count','area','length'].forEach(u => {
+    const btn = document.getElementById('insp-other-unit-' + u);
+    if (!btn) return;
+    const active = u === unitType;
+    btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
+    btn.style.color = active ? 'var(--accent)' : 'var(--textMut)';
+  });
+  // 단위에 따라 필드 변경
+  if (unitType === 'count') {
+    fieldsDiv.innerHTML = `
+      <div class="insp-modal-field">
+        <label>수량</label>
+        <input type="number" id="insp-f-qty" min="0" step="1" placeholder="1"
+          value="${editMeta?.qty || ''}" oninput="inspModalCalc()">
+        <span class="insp-modal-unit">개</span>
+      </div>`;
+  } else if (unitType === 'area') {
+    fieldsDiv.innerHTML = `
+      <div class="insp-modal-field">
+        <label>길이</label>
+        <input type="number" id="insp-f-length" min="0" step="0.01" placeholder="0.00"
+          value="${editMeta?.length || ''}" oninput="inspModalCalc()">
+        <span class="insp-modal-unit">m</span>
+      </div>
+      <div class="insp-modal-field">
+        <label>너비</label>
+        <input type="number" id="insp-f-width" min="0" step="0.01" placeholder="0.00"
+          value="${editMeta?.width || ''}" oninput="inspModalCalc()">
+        <span class="insp-modal-unit">m</span>
+      </div>`;
+  } else if (unitType === 'length') {
+    fieldsDiv.innerHTML = `
+      <div class="insp-modal-field">
+        <label>길이</label>
+        <input type="number" id="insp-f-length" min="0" step="0.01" placeholder="0.00"
+          value="${editMeta?.length || ''}" oninput="inspModalCalc()">
+        <span class="insp-modal-unit">m</span>
+      </div>`;
+  }
+  // 현재 선택된 단위 유형 저장 (hidden) - fieldsDiv 안에 유지
+  let hiddenInput = document.getElementById('insp-f-otherUnit');
+  if (!hiddenInput) {
+    hiddenInput = document.createElement('input');
+    hiddenInput.type = 'hidden';
+    hiddenInput.id = 'insp-f-otherUnit';
+    fieldsDiv.appendChild(hiddenInput);
+  }
+  hiddenInput.value = unitType;
+  inspModalCalc();
+}
+
 function inspModalCalc() {
   const t = inspDrawType;
   const resultEl = document.getElementById('insp-modal-result');
@@ -1783,8 +2133,18 @@ function inspModalCalc() {
     if (wid > 0) resultText += ` / 폭 ${wid.toFixed(1)} mm`;
     if (cnt > 1)  resultText += ` / ${cnt}개소`;
   } else if (t.id === 'other') {
-    const qty = get('qty'), cnt = get('count');
-    if (qty > 0) resultText = `수량 ${qty}개`;
+    const unitType = document.getElementById('insp-f-otherUnit')?.value || 'count';
+    const cnt = get('count');
+    if (unitType === 'count') {
+      const qty = get('qty');
+      if (qty > 0) resultText = `수량 ${qty}개`;
+    } else if (unitType === 'area') {
+      const len = get('length'), wid = get('width');
+      if (len > 0 && wid > 0) resultText = `면적 ${(len*wid).toFixed(3)}m²`;
+    } else if (unitType === 'length') {
+      const len = get('length');
+      if (len > 0) resultText = `연장 ${len.toFixed(2)}m`;
+    }
     if (cnt > 0) resultText += ` / ${cnt}개소`;
   } else {
     // 면적 손상
@@ -1800,6 +2160,7 @@ function inspModalConfirm() {
   if (!inspCurrentEntry) { inspModalCancel(); return; }
   const t   = inspDrawType;
   const get = key => parseFloat(document.getElementById('insp-f-' + key)?.value) || 0;
+  const getStr = key => document.getElementById('insp-f-' + key)?.value?.trim() || '';
   const key = inspCurrentEntry.imageFile;
   if (!inspDamages[key]) inspDamages[key] = [];
 
@@ -1809,21 +2170,47 @@ function inspModalConfirm() {
     length = get('length');
     meta   = { width: get('width'), count: get('count') || 1 };
   } else if (t.id === 'other') {
-    meta = { qty: get('qty'), count: get('count') };
-    area = get('qty');
+    const unitType = document.getElementById('insp-f-otherUnit')?.value || 'count';
+    const customLabel = getStr('customLabel');
+    const cnt = get('count');
+    if (unitType === 'count') {
+      const qty = get('qty');
+      meta = { qty, count: cnt, customLabel, otherUnit: 'count' };
+      area = qty;
+    } else if (unitType === 'area') {
+      const len = get('length'), wid = get('width');
+      meta = { length: len, width: wid, count: cnt, customLabel, otherUnit: 'area' };
+      area = parseFloat((len * wid).toFixed(4));
+    } else if (unitType === 'length') {
+      const len = get('length');
+      meta = { length: len, count: cnt, customLabel, otherUnit: 'length' };
+      length = len;
+    }
   } else {
     const len = get('length'), wid = get('width');
     area  = parseFloat((len * wid).toFixed(4));
     meta  = { length: len, width: wid, count: get('count') || 1 };
   }
 
-  const pts = (_inspPendingPts && _inspPendingPts.length >= 2) ? _inspPendingPts : [];
-  inspDamages[key].push({
-    id: 'dmg_' + (inspNextId++),
-    type: t.id, pts, area, length, meta,
-    drawMode: _inspPendingDrawMode || inspDrawMode,
-  });
-  _inspPendingDrawMode = null;
+  if (_inspEditIdx !== null) {
+    // 수정 모드: pts는 유지, meta/area/length만 갱신
+    const existing = inspDamages[key][_inspEditIdx];
+    if (existing) {
+      existing.meta   = meta;
+      existing.area   = area;
+      existing.length = length;
+      // 새로 그린 pts가 있으면 교체
+      if (_inspPendingPts && _inspPendingPts.length >= 2) existing.pts = _inspPendingPts;
+    }
+    _inspEditIdx = null;
+  } else {
+    // 신규 추가
+    const pts = (_inspPendingPts && _inspPendingPts.length >= 2) ? _inspPendingPts : [];
+    inspDamages[key].push({
+      id: 'dmg_' + (inspNextId++),
+      type: t.id, pts, area, length, meta,
+    });
+  }
 
   _inspPendingPts = null;
   document.getElementById('insp-modal-overlay').classList.remove('show');
@@ -1838,19 +2225,21 @@ function inspModalCancel() {
 
 /* 기하 계산 */
 function inspCalcGeo(pts, mode) {
+  // pts는 비율 좌표(0~1) → canvas px로 변환 후 계산
+  const cPts = _ptsToCanvas(pts);
   const s = inspScaleM;
   if (mode === 'polyline') {
     let len = 0;
-    for (let i = 1; i < pts.length; i++) {
-      const dx = pts[i].x-pts[i-1].x, dy = pts[i].y-pts[i-1].y;
+    for (let i = 1; i < cPts.length; i++) {
+      const dx = cPts[i].x-cPts[i-1].x, dy = cPts[i].y-cPts[i-1].y;
       len += Math.sqrt(dx*dx + dy*dy);
     }
     return { area: 0, length: parseFloat((len * s).toFixed(3)) };
   }
-  let a = 0, n = pts.length;
+  let a = 0, n = cPts.length;
   for (let i = 0; i < n; i++) {
     const j = (i+1) % n;
-    a += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+    a += cPts[i].x * cPts[j].y - cPts[j].x * cPts[i].y;
   }
   return { area: parseFloat((Math.abs(a)/2 * s * s).toFixed(4)), length: 0 };
 }
@@ -1865,16 +2254,17 @@ function inspRedraw() {
   const damages = inspDamages[inspCurrentEntry.imageFile] || [];
   damages.forEach((d, idx) => {
     const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
-    if (!t || !d.pts || d.pts.length < 2) return;
-    const isSelected = _inspSelectedIdx === idx;
-    const canvasPts = _ptsToCanvas(d.pts);
-    // drawMode 기반: curve/line → polyline, 나머지 → t.mode
-    const renderMode = (d.drawMode === 'curve' || d.drawMode === 'line') ? 'polyline' : t.mode;
-    inspDrawShape(ctx, canvasPts, t.color, renderMode, false, isSelected);
-    inspDrawLabel(ctx, { ...d, pts: canvasPts }, t, idx + 1);
-    if (isSelected && d.meta && d.meta._isCircle) inspDrawRotateHandle(ctx, canvasPts, d.meta._rotation || 0);
+    if (!t) return;
+    if (d.pts && d.pts.length >= 2) {
+      const isSelected = _inspSelectedIdx === idx;
+      const canvasPts = _ptsToCanvas(d.pts);
+      inspDrawShape(ctx, canvasPts, t.color, t.mode, false, isSelected);
+      inspDrawLabel(ctx, { ...d, pts: canvasPts }, t, idx + 1);
+      if (isSelected && d.meta && d.meta._isCircle) inspDrawRotateHandle(ctx, canvasPts, d.meta._rotation || 0);
+    }
   });
-  if (damages.length > 0 && inspImgEl) inspDrawDamageTable(ctx, dc.width, dc.height, damages);
+  // 실시간 손상물량표 오버레이
+  if (damages.length > 0) inspDrawDamageTable(ctx, dc.width, dc.height, damages);
 }
 function inspRedrawPreview(mp) {
   inspRedraw();
@@ -1889,7 +2279,11 @@ function inspRedrawPreview(mp) {
 function inspDrawShape(ctx, pts, color, mode, preview, selected) {
   const d = INSP_DPR;
   ctx.save();
-  if (selected) { ctx.shadowColor = '#FFFFFF'; ctx.shadowBlur = 8 * d; }
+  // 선택된 손상: 외곽 글로우 효과
+  if (selected) {
+    ctx.shadowColor = '#FFFFFF';
+    ctx.shadowBlur  = 8 * d;
+  }
   ctx.strokeStyle = selected ? '#FFFFFF' : color;
   ctx.lineWidth   = (preview ? 1.5 : selected ? 2.5 : 2) * d;
   ctx.setLineDash(preview ? [5*d, 4*d] : []);
@@ -1898,17 +2292,39 @@ function inspDrawShape(ctx, pts, color, mode, preview, selected) {
     pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
     ctx.stroke();
   } else {
-    ctx.fillStyle = color + '30';
+    ctx.fillStyle = color + (selected ? '50' : '30');
     ctx.beginPath();
     pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
     ctx.closePath(); ctx.fill(); ctx.stroke();
   }
-  ctx.fillStyle = color;
-  pts.forEach(p => {
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, (preview ? 2 : 3) * d, 0, Math.PI * 2);
-    ctx.fill();
-  });
+  ctx.shadowBlur = 0;
+  // 꼭짓점 점: preview 시에만 표시 (확정된 손상은 선만 표시)
+  if (preview) {
+    ctx.fillStyle = color;
+    pts.forEach(p => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2 * d, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+  ctx.restore();
+}
+
+// 원형 회전 핸들 그리기
+function inspDrawRotateHandle(ctx, pts, rotation) {
+  if (!pts.length) return;
+  const d = INSP_DPR;
+  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+  const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+  const r  = Math.sqrt(Math.pow(pts[0].x - cx, 2) + Math.pow(pts[0].y - cy, 2));
+  const hx = cx + (r + 20*d) * Math.cos(rotation - Math.PI/2);
+  const hy = cy + (r + 20*d) * Math.sin(rotation - Math.PI/2);
+  ctx.save();
+  ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1.5*d; ctx.setLineDash([4*d,3*d]);
+  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(hx, hy); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = '#00E5CC'; ctx.lineWidth = 2*d;
+  ctx.beginPath(); ctx.arc(hx, hy, 7*d, 0, Math.PI*2); ctx.fill(); ctx.stroke();
   ctx.restore();
 }
 function inspDrawLabel(ctx, d, t, no) {
@@ -2020,9 +2436,10 @@ function inspRenderHistory() {
       if (wid > 0) valStr += ` / ${wid.toFixed(1)}mm`;
       if (cnt > 1) valStr += ` / ${cnt}개소`;
     } else if (t.id === 'other') {
-      const qty = d.meta?.qty   || d.area || 0;
-      const cnt = d.meta?.count || 0;
-      valStr = `${qty}개`;
+      const qty   = d.meta?.qty   || d.area || 0;
+      const cnt   = d.meta?.count || 0;
+      const label = d.meta?.customLabel || '';
+      valStr = label ? `${label} ${qty}개` : `${qty}개`;
       if (cnt > 0) valStr += ` / ${cnt}개소`;
     } else {
       const area = d.meta ? (d.meta.length||0)*(d.meta.width||0) : d.area || 0;
@@ -2042,6 +2459,159 @@ function inspRenderHistory() {
   });
 }
 
+/* ── 손상 선택/편집 패널 ── */
+function _inspShowEditPanel(damage, idx) {
+  const panel = document.getElementById('insp-edit-panel');
+  const title = document.getElementById('insp-edit-title');
+  const rotBtn = document.getElementById('insp-edit-rotate-btn');
+  const rotCtrl = document.getElementById('insp-edit-rotate-ctrl');
+  if (!panel) return;
+
+  const t = INSP_DAMAGE_TYPES.find(x => x.id === damage.type);
+  title.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${t?.color||'#fff'};margin-right:5px;vertical-align:middle;"></span>${t?.label || damage.type} #${idx + 1} 선택됨`;
+
+  // 원형 여부: pts가 32개 이상이면 원형으로 판단
+  const isCircle = damage.pts && damage.pts.length >= 28;
+  rotBtn.style.display = isCircle ? '' : 'none';
+  rotCtrl.style.display = 'none';
+
+  // 기존 회전각 복원
+  if (isCircle && damage.meta?._rotation != null) {
+    const deg = Math.round(damage.meta._rotation * 180 / Math.PI);
+    document.getElementById('insp-edit-rotate-slider').value = deg;
+    document.getElementById('insp-edit-rotate-val').textContent = deg + '°';
+  }
+
+  panel.classList.add('show');
+}
+
+function _inspHideEditPanel() {
+  const panel = document.getElementById('insp-edit-panel');
+  if (panel) panel.classList.remove('show');
+  document.getElementById('insp-edit-rotate-ctrl').style.display = 'none';
+  // 이동 모드 해제
+  if (_inspMoveMode) {
+    _inspMoveMode = false;
+    _inspMoveDragStart = null; _inspMoveOrigPts = null;
+    document.getElementById('insp-draw-canvas').style.cursor = '';
+  }
+}
+
+// 이동 모드 상태
+let _inspMoveMode = false;
+let _inspMoveDragStart = null;
+let _inspMoveOrigPts   = null;
+
+function inspEditMoveMode() {
+  if (_inspSelectedIdx === null) return;
+  _inspMoveMode = !_inspMoveMode;
+  const btn = document.getElementById('insp-edit-move-btn');
+  if (_inspMoveMode) {
+    btn.style.borderColor = 'var(--accent)';
+    btn.style.color = 'var(--accent)';
+    btn.textContent = '⤢ 이동 중...';
+    document.getElementById('insp-draw-canvas').style.cursor = 'move';
+  } else {
+    btn.style.borderColor = ''; btn.style.color = '';
+    btn.textContent = '⤢ 이동';
+    document.getElementById('insp-draw-canvas').style.cursor = '';
+    _inspMoveDragStart = null; _inspMoveOrigPts = null;
+  }
+}
+
+// 다시 그리기 — 기존 손상 제거 후 같은 번호로 재등록
+function inspEditRedraw() {
+  if (_inspSelectedIdx === null || !inspCurrentEntry) return;
+  const key = inspCurrentEntry.imageFile;
+  const damages = inspDamages[key] || [];
+  const d = damages[_inspSelectedIdx];
+  if (!d) return;
+
+  // 손상 유형 설정
+  const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
+  if (t) inspSetType(t.id);
+
+  // 편집 모드 설정
+  _inspEditIdx = _inspSelectedIdx;
+  _inspSelectedIdx = null;
+  _inspHideEditPanel();
+
+  // 안내
+  alert(`${t?.label || d.type} #${_inspEditIdx + 1}을 다시 그려주세요.
+그리기 완료 후 수치 입력창이 열립니다.`);
+  inspRedraw();
+}
+
+// 수치만 수정
+function inspEditMeta() {
+  if (_inspSelectedIdx === null || !inspCurrentEntry) return;
+  const key = inspCurrentEntry.imageFile;
+  const d = inspDamages[key]?.[_inspSelectedIdx];
+  if (!d) return;
+  const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
+  if (!t) return;
+
+  _inspEditIdx = _inspSelectedIdx;
+  inspDrawType = t;
+  // 기존 pts 유지 (_inspPendingPts = null → inspModalConfirm에서 기존 pts 유지)
+  _inspPendingPts = null;
+  inspModalOpen(t, false, d.meta);
+}
+
+// 회전 모드 토글
+function inspEditRotateMode() {
+  const ctrl = document.getElementById('insp-edit-rotate-ctrl');
+  ctrl.style.display = ctrl.style.display === 'none' ? '' : 'none';
+}
+
+// 원형 회전 적용
+function inspEditRotate(degStr) {
+  if (_inspSelectedIdx === null || !inspCurrentEntry) return;
+  const deg = parseFloat(degStr);
+  const rad = deg * Math.PI / 180;
+  document.getElementById('insp-edit-rotate-val').textContent = deg + '°';
+
+  const key = inspCurrentEntry.imageFile;
+  const d = inspDamages[key]?.[_inspSelectedIdx];
+  if (!d || d.pts.length < 28) return;
+
+  // 중심점 계산
+  const cx = d.pts.reduce((s, p) => s + p.x, 0) / d.pts.length;
+  const cy = d.pts.reduce((s, p) => s + p.y, 0) / d.pts.length;
+
+  // 원래 반경 (첫 번째 점 기준)
+  if (!d.meta._origPts) d.meta._origPts = [...d.pts];  // 원본 저장
+  const origPts = d.meta._origPts;
+  const baseRad = d.meta._baseRot || 0;
+
+  // 회전 적용
+  d.pts = origPts.map((p, i) => {
+    const angle = (i / origPts.length) * Math.PI * 2 + rad;
+    const rx = p.x - cx, ry = p.y - cy;
+    const r = Math.sqrt(rx*rx + ry*ry);
+    const origAngle = Math.atan2(ry, rx);
+    return {
+      x: cx + r * Math.cos(origAngle + rad),
+      y: cy + r * Math.sin(origAngle + rad),
+    };
+  });
+  d.meta._rotation = rad;
+  inspRedraw();
+}
+
+// 선택 손상 삭제
+function inspEditDelete() {
+  if (_inspSelectedIdx === null || !inspCurrentEntry) return;
+  const key = inspCurrentEntry.imageFile;
+  const damages = inspDamages[key];
+  if (!damages) return;
+  damages.splice(_inspSelectedIdx, 1);
+  _inspSelectedIdx = null;
+  _inspHideEditPanel();
+  inspRedraw();
+  inspRenderHistory();
+}
+
 /* 손상 삭제 */
 function inspDeleteDamage(dmgId) {
   if (!inspCurrentEntry) return;
@@ -2053,8 +2623,10 @@ function inspDeleteDamage(dmgId) {
 /* 도구 선택 */
 function inspSetMode(mode) {
   inspDrawMode = mode;
-  document.getElementById('insp-mode-polygon').classList.toggle('active',  mode === 'polygon');
-  document.getElementById('insp-mode-freehand').classList.toggle('active', mode === 'freehand');
+  ['line','curve','rect','circle'].forEach(m => {
+    const el = document.getElementById('insp-mode-' + m);
+    if (el) el.classList.toggle('active', mode === m);
+  });
   inspResetDraw(); inspRedraw();
 }
 function inspSetType(typeId) {
@@ -2208,13 +2780,10 @@ PNG 내보내기 시 데이터 수만큼 자동으로 채워집니다.`);
 function inspTableSetEnd() {
   _inspTableSetStep = 0; _inspTableP1 = null;
   const guide = document.getElementById('insp-table-guide');
-  if (!guide) return;
   guide.classList.remove('active');
   guide.onclick = null; guide.onmousemove = null;
-  const preview = document.getElementById('insp-table-preview');
-  if (preview) preview.style.display = 'none';
-  const btn = document.getElementById('insp-table-set-btn');
-  if (btn) btn.classList.remove('active');
+  document.getElementById('insp-table-preview').style.display = 'none';
+  document.getElementById('insp-table-set-btn').classList.remove('active');
 }
 
 // ESC로 표 위치 설정 취소
@@ -2228,26 +2797,34 @@ document.addEventListener('keydown', e => {
 ══════════════════════════════════════════ */
 function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
   if (!damages || damages.length === 0) return;
-  if (!inspImgEl) return;
 
   const idr = inspImgDrawRect;
   if (!idr) return;
 
   // ── 고정값 (이미지 원본 6300×4455px 기준) ──
-  const ORIG_H    = inspImgEl.naturalHeight;
-  const ROW_Y1_PX = 508;
-  const ROW_H_PX  = 67;
-  const imgScale  = idr.dh / ORIG_H;
-  const rowY1     = idr.dy + ROW_Y1_PX * imgScale;
-  const rowH      = ROW_H_PX * imgScale;
+  const ORIG_H    = inspImgEl.naturalHeight;  // 실제 이미지 원본 높이
+  const ROW_Y1_PX = 508;   // 첫 번째 데이터 행 상단 Y (원본 px 기준)
+  const ROW_H_PX  = 67;    // 행 높이 (원본 px 기준)
 
-  const COL_CENTERS = [0.69675, 0.7146, 0.7723, 0.82873, 0.84952, 0.86921, 0.88579, 0.90476, 0.92325, 0.94405];
+  // 원본 px → canvas 실제 px 변환
+  const imgScale = idr.dh / ORIG_H;
+  const rowY1 = idr.dy + ROW_Y1_PX * imgScale;  // 행 상단 (canvas px)
+  const rowH  = ROW_H_PX * imgScale;             // 행 높이 (canvas px)
+
+  // ── 열 중앙 X좌표 직접 지정 (이미지 원본 1472px 기준 비율) ──
+  // 번호|회차|손상내용|폭깊이|길이|너비|개소|수량|단위|비고
+  const COL_CENTERS = [0.69675, 0.7146, 0.7723, 0.82873, 0.84952, 0.86921, 0.88579, 0.90476, 0.92325, 0.94405];  // 6300px 기준
   const COL_KEYS    = ['no','round','content','widthDepth','length','width','count','qty','unit','note'];
+
+  // 이미지 원본 비율 → canvas 실제 픽셀 X 변환
+  // idr.dw = canvas에서 이미지가 차지하는 너비, idr.dx = 이미지 시작 X
+  // COL_CENTERS는 이미지 원본 전체 너비 기준 비율
+  // → canvas 상의 X = idr.dx + COL_CENTERS[i] * idr.dw
   const colCentersPx = COL_CENTERS.map(r => idr.dx + r * idr.dw);
 
   const fontSize = Math.max(7, Math.round(rowH * 0.52));
   ctx.save();
-  ctx.font = `${fontSize}px 'Noto Sans KR', sans-serif`;
+  ctx.font         = `${fontSize}px 'Noto Sans KR', sans-serif`;
   ctx.fillStyle    = '#000000';
   ctx.textBaseline = 'middle';
   ctx.textAlign    = 'center';
@@ -2255,12 +2832,16 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
   damages.forEach((d, idx) => {
     const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
     if (!t) return;
-    const thisRowMid = rowY1 + idx * rowH + rowH / 2;
+
+    const thisRowY1  = rowY1 + idx * rowH;
+    const thisRowMid = thisRowY1 + rowH / 2;
+
+    // 컬럼 데이터 구성
     const meta = d.meta || {};
     let widthDepth = '', lengthStr = '', widthStr = '', qtyStr = '';
     const countStr = String(meta.count || 1);
     let unitStr = t.unit;
-    let contentStr = t.label;
+    let contentStr = t.label;  // 기본 손상내용
 
     if (d.type === 'crack') {
       lengthStr  = meta.length ? meta.length.toFixed(2) : (d.length ? d.length.toFixed(2) : '');
@@ -2269,29 +2850,52 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
     } else if (d.type === 'other') {
       const otherUnit = meta.otherUnit || 'count';
       if (meta.customLabel) contentStr = meta.customLabel;
-      if (otherUnit === 'count') { qtyStr = String(meta.qty || ''); unitStr = '개'; }
-      else if (otherUnit === 'area') {
+      if (otherUnit === 'count') {
+        qtyStr = String(meta.qty || ''); unitStr = '개';
+      } else if (otherUnit === 'area') {
         const len = meta.length || 0, wid = meta.width || 0;
-        lengthStr = len ? len.toFixed(2) : ''; widthStr = wid ? wid.toFixed(2) : '';
-        qtyStr = (len && wid) ? (len * wid).toFixed(3) : ''; unitStr = 'm²';
-      } else { lengthStr = meta.length ? meta.length.toFixed(2) : ''; qtyStr = lengthStr; unitStr = 'm'; }
+        lengthStr = len ? len.toFixed(2) : '';
+        widthStr  = wid ? wid.toFixed(2) : '';
+        qtyStr    = (len && wid) ? (len * wid).toFixed(3) : '';
+        unitStr   = 'm²';
+      } else if (otherUnit === 'length') {
+        lengthStr = meta.length ? meta.length.toFixed(2) : '';
+        qtyStr    = lengthStr; unitStr = 'm';
+      }
     } else {
-      const len = meta.length || 0, wid = meta.width || 0;
-      lengthStr = len ? len.toFixed(2) : ''; widthStr = wid ? wid.toFixed(2) : '';
-      qtyStr = len && wid ? (len * wid).toFixed(3) : (d.area ? d.area.toFixed(3) : '');
+      const len = meta.length || 0;
+      const wid = meta.width  || 0;
+      lengthStr = len ? len.toFixed(2) : '';
+      widthStr  = wid ? wid.toFixed(2) : '';
+      qtyStr    = len && wid ? (len * wid).toFixed(3)
+                : (d.area    ? d.area.toFixed(3) : '');
     }
 
-    const cellData = { no: String(idx+1), round: '1', content: contentStr,
-      widthDepth, length: lengthStr, width: widthStr, count: countStr, qty: qtyStr, unit: unitStr, note: '' };
+    const cellData = {
+      no:         String(idx + 1),
+      round:      '1',
+      content:    contentStr,
+      widthDepth: widthDepth,
+      length:     lengthStr,
+      width:      widthStr,
+      count:      countStr,
+      qty:        qtyStr,
+      unit:       unitStr,
+      note:       '',
+    };
 
+    // 각 열 중앙 X에 텍스트 직접 배치
     COL_KEYS.forEach((key, ci) => {
       const text = cellData[key] || '';
       if (!text) return;
       ctx.fillText(text, colCentersPx[ci], thisRowMid);
     });
   });
+
   ctx.restore();
 }
+
+/* PNG 내보내기 — 손상물량표 텍스트 포함 */
 function inspExportPNG() {
   if (!inspImgEl) return;
   const ic  = document.getElementById('insp-img-canvas');
@@ -2305,8 +2909,8 @@ function inspExportPNG() {
   ctx.drawImage(ic, 0, 0);
   ctx.drawImage(dc, 0, 0);
 
-  // 2. 손상물량표에 텍스트 기입
-  if (_inspTableRect && inspCurrentEntry) {
+  // 2. 손상물량표에 텍스트 기입 (고정 위치 - 표 위치 설정 불필요)
+  if (inspCurrentEntry) {
     const list = inspDamages[inspCurrentEntry.imageFile] || [];
     if (list.length > 0) {
       inspDrawDamageTable(ctx, m.width, m.height, list);
@@ -2316,19 +2920,49 @@ function inspExportPNG() {
   m.toBlob(b => _inspDl(b, `inspection_${inspCurrentEntry?.label||'export'}_${_inspDs()}.png`), 'image/png');
 }
 function inspExportCSV() {
-  const rows = [['이미지','부재','손상유형','개수','면적(m²)','연장(m)','내보내기시각']];
+  // 손상물량표 형식: 번호,회차,손상내용,폭/깊이,길이,너비,개소,수량,단위,비고
+  const allRows = [['손상물량표'], ['번호','회차','손상내용','폭/깊이','길이','너비','개소','수량','단위','비고']];
+
   inspMapData.forEach(entry => {
     const list = inspDamages[entry.imageFile] || [];
-    const sm = {};
-    INSP_DAMAGE_TYPES.forEach(dt => { sm[dt.id] = { count:0, area:0, length:0 }; });
-    list.forEach(d => { if(sm[d.type]){sm[d.type].count++;sm[d.type].area+=d.area||0;sm[d.type].length+=d.length||0;} });
-    INSP_DAMAGE_TYPES.forEach(dt => {
-      const s = sm[dt.id]; if (!s||s.count===0) return;
-      rows.push([entry.imageFile, entry.label, dt.label, s.count, s.area.toFixed(4), s.length.toFixed(3), new Date().toISOString()]);
+    if (list.length === 0) return;
+
+    allRows.push([`[${entry.label}]`,'','','','','','','','','']);
+
+    list.forEach((d, idx) => {
+      const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
+      if (!t) return;
+      const meta = d.meta || {};
+      let contentStr = (d.type === 'other' && meta.customLabel) ? meta.customLabel : t.label;
+      let widthDepth = '', lengthStr = '', widthStr = '', qtyStr = '', unitStr = t.unit;
+
+      if (d.type === 'crack') {
+        widthDepth = meta.width  ? meta.width.toFixed(1)  : '';
+        lengthStr  = meta.length ? meta.length.toFixed(2) : (d.length ? d.length.toFixed(2) : '');
+        qtyStr = lengthStr; unitStr = 'm';
+      } else if (d.type === 'other') {
+        const ou = meta.otherUnit || 'count';
+        if (ou === 'count')  { qtyStr = String(meta.qty||''); unitStr = '개'; }
+        else if (ou === 'area') {
+          lengthStr = (meta.length||0).toFixed(2); widthStr = (meta.width||0).toFixed(2);
+          qtyStr = ((meta.length||0)*(meta.width||0)).toFixed(3); unitStr = 'm²';
+        } else { lengthStr = (meta.length||0).toFixed(2); qtyStr = lengthStr; unitStr = 'm'; }
+      } else {
+        const len = meta.length||0, wid = meta.width||0;
+        lengthStr = len ? len.toFixed(2) : ''; widthStr = wid ? wid.toFixed(2) : '';
+        qtyStr = (len&&wid) ? (len*wid).toFixed(3) : (d.area ? d.area.toFixed(3) : ''); unitStr = 'm²';
+      }
+
+      allRows.push([String(idx+1),'1',contentStr,widthDepth,lengthStr,widthStr,String(meta.count||1),qtyStr,unitStr,'']);
     });
+    allRows.push(['','','','','','','','','','']);
   });
-  _inspDl(new Blob(['\uFEFF'+rows.map(r=>r.join(',')).join('\n')],{type:'text/csv;charset=utf-8'}),
-    `inspection_all_${_inspDs()}.csv`);
+
+  _inspDl(
+    new Blob(['\uFEFF' + allRows.map(r => r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n')],
+      {type:'text/csv;charset=utf-8'}),
+    `inspection_${_inspDs()}.csv`
+  );
 }
 function _inspDl(blob, name) {
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
