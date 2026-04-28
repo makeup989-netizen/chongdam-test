@@ -244,8 +244,35 @@
   .footer-item { display:flex; align-items:center; gap:5px; }
   .footer-dot { width:5px; height:5px; border-radius:50%; }
 
-  /* ── 외관조사망도 탭 버튼 (평소 숨김) ── */
-  #tab-inspection-btn { display: none; }
+  /* ── 외관조사망도 탭 (항상 표시) ── */
+  #tab-inspection-btn { display: flex; }
+
+  .insp-list-search {
+    width:100%; box-sizing:border-box;
+    background:var(--bg); border:1px solid var(--border);
+    color:var(--text); font-family:var(--mono); font-size:11px;
+    padding:6px 10px; border-radius:4px; margin-bottom:8px; outline:none;
+  }
+  .insp-list-search:focus { border-color:var(--accent); }
+  .insp-list-group-title {
+    font-family:var(--mono); font-size:9px; letter-spacing:.1em;
+    color:var(--textMut); padding:8px 2px 4px; text-transform:uppercase;
+  }
+  .insp-list-item {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:7px 10px; border-radius:4px; cursor:pointer;
+    border:1px solid transparent; margin-bottom:3px;
+    transition:border-color .15s, background .15s;
+    font-family:var(--mono); font-size:11px; color:var(--text);
+  }
+  .insp-list-item:hover { border-color:var(--accent); background:rgba(0,229,204,.06); }
+  .insp-list-item.active { border-color:var(--accent); background:rgba(0,229,204,.12); color:var(--accent); }
+  .insp-list-item-name { flex:1; }
+  .insp-list-item-badge {
+    font-size:9px; padding:2px 6px; border-radius:10px;
+    background:rgba(0,229,204,.15); color:var(--accent); margin-left:6px; white-space:nowrap;
+  }
+  .insp-list-item-badge.has-damage { background:rgba(226,75,74,.15); color:#E24B4A; }
 
   /* ── 전체화면 오버레이 ── */
   #insp-fullscreen {
@@ -576,6 +603,13 @@
    <span style="color:var(--textMut)">모델:</span> Revit IFC → GLB 변환
    </div>
    </div>
+    </div>
+
+    <!-- 조사 탭 패널 -->
+    <div class="panel-content" id="tab-inspection" style="display:none">
+      <input class="insp-list-search" id="insp-list-search"
+        placeholder="🔍  부재명 검색..." oninput="inspRenderList(this.value)">
+      <div id="insp-list-body"></div>
     </div>
 
   </div>
@@ -1372,10 +1406,15 @@ function renderPanel() {
 function switchTab(el, tab) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  document.getElementById('tab-sensors').style.display = tab === 'sensors' ? 'block' : 'none';
-  document.getElementById('tab-info').style.display  = tab === 'info'  ? 'block' : 'none';
-  // 조사 탭 클릭 → 전체화면 오픈
-  if (tab === 'inspection') inspOpen();
+  document.getElementById('tab-sensors').style.display    = tab === 'sensors'    ? 'block' : 'none';
+  document.getElementById('tab-info').style.display       = tab === 'info'       ? 'block' : 'none';
+  document.getElementById('tab-inspection').style.display = tab === 'inspection' ? 'block' : 'none';
+  if (tab === 'inspection') {
+    // 검색창 초기화 + 리스트 렌더
+    const searchEl = document.getElementById('insp-list-search');
+    if (searchEl) searchEl.value = '';
+    inspRenderList('');
+  }
 }
 
 /* ══════════════════════════════════════════════════════
@@ -1442,6 +1481,7 @@ async function inspLoadMap() {
     const res  = await fetch(INSP_BASE + 'inspection_map.json?_=' + Date.now());
     inspMapData = await res.json();
     console.log(`[외관조사망도] 매핑 ${inspMapData.length}건 로드`);
+    inspRenderList('');  // 초기 리스트 렌더
   } catch(e) {
     console.warn('[외관조사망도] inspection_map.json 로드 실패', e);
   }
@@ -1464,14 +1504,74 @@ function inspFindEntry(memberId) {
   ) || null;
 }
 
+/* 조사 리스트 렌더링 */
+function inspRenderList(query) {
+  const body = document.getElementById('insp-list-body');
+  if (!body) return;
+  const q = (query || '').trim().toLowerCase();
+
+  // 부재 유형별 그룹핑
+  const groups = {};
+  inspMapData.forEach(entry => {
+    if (q && !entry.label.toLowerCase().includes(q)) return;
+    // label에서 유형 추출 (예: "교각 P40" → "교각", "교대 A1" → "교대")
+    const groupKey = entry.label.replace(/\s*[\w가-힣]+\d+.*$/, '').trim() || '기타';
+    if (!groups[groupKey]) groups[groupKey] = [];
+    groups[groupKey].push(entry);
+  });
+
+  body.innerHTML = '';
+
+  if (Object.keys(groups).length === 0) {
+    body.innerHTML = '<div style="color:var(--textMut);font-size:10px;padding:12px 4px;font-family:var(--mono);">검색 결과 없음</div>';
+    return;
+  }
+
+  Object.entries(groups).forEach(([groupName, entries]) => {
+    // 그룹 타이틀
+    const gt = document.createElement('div');
+    gt.className = 'insp-list-group-title';
+    gt.textContent = groupName;
+    body.appendChild(gt);
+
+    entries.forEach(entry => {
+      const dmgCount = (inspDamages[entry.imageFile] || []).length;
+      const isActive = inspCurrentEntry && inspCurrentEntry.imageFile === entry.imageFile;
+
+      const item = document.createElement('div');
+      item.className = 'insp-list-item' + (isActive ? ' active' : '');
+      item.innerHTML = `
+        <span class="insp-list-item-name">${entry.label}</span>
+        ${dmgCount > 0
+          ? `<span class="insp-list-item-badge has-damage">${dmgCount}건</span>`
+          : `<span class="insp-list-item-badge">미기록</span>`}
+      `;
+      item.onclick = () => {
+        // 리스트 active 갱신
+        body.querySelectorAll('.insp-list-item').forEach(el => el.classList.remove('active'));
+        item.classList.add('active');
+        // 전체화면 오픈
+        inspOpen(entry);
+      };
+      body.appendChild(item);
+    });
+  });
+}
+
 /* 3D 부재 클릭 시 외부에서 호출 */
 function inspOpenByMemberId(memberId) {
   const entry = inspFindEntry(memberId);
   if (!entry) return false;
-  // 탭 버튼 표시
-  const tabBtn = document.getElementById('tab-inspection-btn');
-  tabBtn.style.display = 'flex';
-  // 전체화면 오픈 + 이미지 로드
+  // 조사 탭으로 전환 + 리스트에서 해당 항목 활성화
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-inspection-btn').classList.add('active');
+  document.getElementById('tab-sensors').style.display    = 'none';
+  document.getElementById('tab-info').style.display       = 'none';
+  document.getElementById('tab-inspection').style.display = 'block';
+  const searchEl = document.getElementById('insp-list-search');
+  if (searchEl) searchEl.value = '';
+  inspRenderList('');
+  // 전체화면 오픈
   inspOpen(entry);
   return true;
 }
@@ -1497,11 +1597,13 @@ function inspOpen(entry) {
 /* 전체화면 닫기 → Digital Twin 복귀 */
 function inspClose() {
   document.getElementById('insp-fullscreen').classList.remove('show');
-  // 조사 탭 버튼 비활성화
+  // 조사 탭으로 복귀 (리스트 갱신)
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.getElementById('tab-btn-sensors').classList.add('active');
-  document.getElementById('tab-sensors').style.display = 'block';
-  document.getElementById('tab-info').style.display  = 'none';
+  document.getElementById('tab-inspection-btn').classList.add('active');
+  document.getElementById('tab-sensors').style.display    = 'none';
+  document.getElementById('tab-info').style.display       = 'none';
+  document.getElementById('tab-inspection').style.display = 'block';
+  inspRenderList(document.getElementById('insp-list-search')?.value || '');
   // 3D 하이라이트 + hover 모두 원복
   restoreHighlight();
   clearHover();
