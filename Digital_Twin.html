@@ -1679,8 +1679,7 @@ function inspBindEvents() {
 }
 
 /* 드로잉 완료 → 수치 입력 모달 오픈 */
-let _inspPendingPts = null;      // 모달 확인 전 임시 보관
-let _inspPendingDrawMode = null;  // 그리기 완료 시점의 드로잉 모드
+// _inspPendingPts, _inspPendingDrawMode는 위에서 선언됨
 
 function inspFinish() {
   if (!inspCurrentEntry) return;
@@ -1839,7 +1838,7 @@ function inspRedraw() {
     inspDrawLabel(ctx, { ...d, pts: canvasPts }, t, idx + 1);
   });
   // 실시간 손상물량표 오버레이
-  if (damages.length > 0) inspDrawDamageTable(ctx, dc.width, dc.height, damages);
+  if (damages.length > 0 && inspImgEl) inspDrawDamageTable(ctx, dc.width, dc.height, damages);
 }
 function inspRedrawPreview(mp) {
   inspRedraw();
@@ -2193,90 +2192,70 @@ document.addEventListener('keydown', e => {
    컬럼 순서: 번호 | 회차 | 손상내용 | 폭·깊이 | 길이 | 너비 | 개소 | 수량 | 단위 | 비고
 ══════════════════════════════════════════ */
 function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
-  if (!_inspTableRect) return;
   if (!damages || damages.length === 0) return;
-
-  const { x1r, y1r, x2r, y2r } = _inspTableRect;
   const idr = inspImgDrawRect;
-  if (!idr) return;
+  if (!idr || !inspImgEl) return;
 
-  // 지정한 행 1개의 실제 canvas 픽셀 좌표 (DPR 포함)
-  const rowY1 = idr.dy + y1r * idr.dh;  // 행 상단
-  const rowY2 = idr.dy + y2r * idr.dh;  // 행 하단
-  const rowH  = rowY2 - rowY1;           // 행 높이 (1개 행)
+  // ── 고정값 (이미지 원본 6300×4455px 기준) ──
+  const ORIG_H    = inspImgEl.naturalHeight;
+  const ROW_Y1_PX = 508;
+  const ROW_H_PX  = 67;
+  const imgScale  = idr.dh / ORIG_H;
+  const rowY1     = idr.dy + ROW_Y1_PX * imgScale;
+  const rowH      = ROW_H_PX * imgScale;
 
-  // ── 열 중앙 X좌표 직접 지정 (이미지 원본 1472px 기준 비율) ──
-  // 번호|회차|손상내용|폭깊이|길이|너비|개소|수량|단위|비고
-  const COL_CENTERS = [0.69565, 0.71604, 0.77241, 0.82676, 0.8485, 0.87025, 0.88587, 0.90353, 0.92256, 0.92935];
+  // 열 중앙 X좌표 (6300px 기준 비율)
+  const COL_CENTERS = [0.69675, 0.7146, 0.7723, 0.82873, 0.84952, 0.86921, 0.88579, 0.90476, 0.92325, 0.94405];
   const COL_KEYS    = ['no','round','content','widthDepth','length','width','count','qty','unit','note'];
-
-  // 이미지 원본 비율 → canvas 실제 픽셀 X 변환
-  // idr.dw = canvas에서 이미지가 차지하는 너비, idr.dx = 이미지 시작 X
-  // COL_CENTERS는 이미지 원본 전체 너비 기준 비율
-  // → canvas 상의 X = idr.dx + COL_CENTERS[i] * idr.dw
   const colCentersPx = COL_CENTERS.map(r => idr.dx + r * idr.dw);
 
   const fontSize = Math.max(7, Math.round(rowH * 0.52));
   ctx.save();
-  ctx.font         = `${fontSize}px 'Noto Sans KR', sans-serif`;
-  ctx.fillStyle    = '#000000';
+  ctx.font = `${fontSize}px 'Noto Sans KR', sans-serif`;
+  ctx.fillStyle = '#000000';
   ctx.textBaseline = 'middle';
-  ctx.textAlign    = 'center';
+  ctx.textAlign = 'center';
 
   damages.forEach((d, idx) => {
     const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
     if (!t) return;
-
-    const thisRowY1  = rowY1 + idx * rowH;
-    const thisRowMid = thisRowY1 + rowH / 2;
-
-    // 컬럼 데이터 구성
+    const thisRowMid = rowY1 + idx * rowH + rowH / 2;
     const meta = d.meta || {};
     let widthDepth = '', lengthStr = '', widthStr = '', qtyStr = '';
     const countStr = String(meta.count || 1);
     let unitStr = t.unit;
+    let contentStr = t.label;
 
     if (d.type === 'crack') {
       lengthStr  = meta.length ? meta.length.toFixed(2) : (d.length ? d.length.toFixed(2) : '');
       widthDepth = meta.width  ? meta.width.toFixed(1)  : '';
       qtyStr     = lengthStr;
     } else if (d.type === 'other') {
-      qtyStr  = String(meta.qty || '');
-      unitStr = '개';
+      const otherUnit = meta.otherUnit || 'count';
+      if (meta.customLabel) contentStr = meta.customLabel;
+      if (otherUnit === 'count') { qtyStr = String(meta.qty || ''); unitStr = '개'; }
+      else if (otherUnit === 'area') {
+        const len = meta.length || 0, wid = meta.width || 0;
+        lengthStr = len ? len.toFixed(2) : ''; widthStr = wid ? wid.toFixed(2) : '';
+        qtyStr = (len && wid) ? (len * wid).toFixed(3) : ''; unitStr = 'm²';
+      } else { lengthStr = meta.length ? meta.length.toFixed(2) : ''; qtyStr = lengthStr; unitStr = 'm'; }
     } else {
-      const len = meta.length || 0;
-      const wid = meta.width  || 0;
-      lengthStr = len ? len.toFixed(2) : '';
-      widthStr  = wid ? wid.toFixed(2) : '';
-      qtyStr    = len && wid ? (len * wid).toFixed(3)
-                : (d.area    ? d.area.toFixed(3) : '');
+      const len = meta.length || 0, wid = meta.width || 0;
+      lengthStr = len ? len.toFixed(2) : ''; widthStr = wid ? wid.toFixed(2) : '';
+      qtyStr = len && wid ? (len * wid).toFixed(3) : (d.area ? d.area.toFixed(3) : '');
     }
 
-    const cellData = {
-      no:         String(idx + 1),
-      round:      '1',
-      content:    t.label,
-      widthDepth: widthDepth,
-      length:     lengthStr,
-      width:      widthStr,
-      count:      countStr,
-      qty:        qtyStr,
-      unit:       unitStr,
-      note:       '',
-    };
+    const cellData = { no: String(idx+1), round: '1', content: contentStr,
+      widthDepth, length: lengthStr, width: widthStr, count: countStr, qty: qtyStr, unit: unitStr, note: '' };
 
-    // 각 열 중앙 X에 텍스트 직접 배치
     COL_KEYS.forEach((key, ci) => {
       const text = cellData[key] || '';
       if (!text) return;
       ctx.fillText(text, colCentersPx[ci], thisRowMid);
     });
   });
-
   ctx.restore();
 }
-
-/* PNG 내보내기 — 손상물량표 텍스트 포함 */
 function inspExportPNG() {
   if (!inspImgEl) return;
   const ic  = document.getElementById('insp-img-canvas');
