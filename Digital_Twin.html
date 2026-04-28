@@ -1407,11 +1407,7 @@ let inspDamages      = {};     // { imageFile: [{id,type,pts,area,length},...] }
 let inspCurrentEntry = null;   // 현재 표시 중인 매핑 엔트리
 let inspScaleM       = 0.01;
 let inspNextId       = 1;
-let inspDrawMode     = 'line';
-let _inspSelectedIdx = null;   // 선택된 손상 인덱스
-let _inspPendingPts  = null;   // 그리기 완료 후 대기 pts
-let _inspPendingDrawMode = null; // 그리기 완료 시점의 드로잉 모드
-let _inspEditIdx     = null;   // 수정 중인 손상 인덱스
+let inspDrawMode     = 'polygon';
 let inspDrawType     = INSP_DAMAGE_TYPES[0];
 let inspDrawing      = false;
 let inspCurrentPts   = [];
@@ -1567,29 +1563,20 @@ function inspDrawImg() {
 
 /* 좌표 */
 /* 클릭 좌표 → 캔버스 내부 좌표 (DPR 배율 적용) */
-// canvas px → 이미지 비율 좌표 (0~1) 변환
-function _canvasPxToRatio(cx, cy) {
-  const idr = inspImgDrawRect;
-  if (!idr) return { x: 0, y: 0 };
-  return { x: (cx - idr.dx) / idr.dw, y: (cy - idr.dy) / idr.dh };
-}
-function _ratioToCanvasPx(rx, ry) {
-  const idr = inspImgDrawRect;
-  if (!idr) return { x: 0, y: 0 };
-  return { x: idr.dx + rx * idr.dw, y: idr.dy + ry * idr.dh };
-}
-function _ptsToCanvas(pts) {
-  return pts.map(p => _ratioToCanvasPx(p.x, p.y));
-}
-
 function inspPt(e) {
   const r = document.getElementById('insp-draw-canvas').getBoundingClientRect();
-  return _canvasPxToRatio((e.clientX - r.left) * INSP_DPR, (e.clientY - r.top) * INSP_DPR);
+  return {
+    x: (e.clientX - r.left) * INSP_DPR,
+    y: (e.clientY - r.top)  * INSP_DPR
+  };
 }
 function inspPtT(e) {
   const r = document.getElementById('insp-draw-canvas').getBoundingClientRect();
   const t = e.touches[0] || e.changedTouches[0];
-  return _canvasPxToRatio((t.clientX - r.left) * INSP_DPR, (t.clientY - r.top) * INSP_DPR);
+  return {
+    x: (t.clientX - r.left) * INSP_DPR,
+    y: (t.clientY - r.top)  * INSP_DPR
+  };
 }
 
 /* 이벤트 바인딩 (DOM 준비 후 1회 실행) */
@@ -1679,16 +1666,17 @@ function inspBindEvents() {
 }
 
 /* 드로잉 완료 → 수치 입력 모달 오픈 */
-// _inspPendingPts, _inspPendingDrawMode는 위에서 선언됨
+let _inspPendingPts = null;       // 모달 확인 전 임시 보관
+let _inspPendingDrawMode = null;  // 그리기 완료 시점의 드로잉 모드
 
 function inspFinish() {
   if (!inspCurrentEntry) return;
-  const pts = inspDrawMode === 'curve' ? [...inspFreehandPts] : [...inspCurrentPts];
+  const pts = inspDrawMode === 'freehand' ? [...inspFreehandPts] : [...inspCurrentPts];
   inspResetDraw();
   inspRedraw();
   if (pts.length < 2) return;
   _inspPendingPts = pts;
-  _inspPendingDrawMode = inspDrawMode;  // 그리기 모드 저장
+  _inspPendingDrawMode = inspDrawMode;
   inspModalOpen(inspDrawType);
 }
 function inspResetDraw() {
@@ -1781,15 +1769,14 @@ function inspModalConfirm() {
   }
 
   const pts = (_inspPendingPts && _inspPendingPts.length >= 2) ? _inspPendingPts : [];
-  const savedDrawMode = _inspPendingDrawMode || inspDrawMode;
   inspDamages[key].push({
     id: 'dmg_' + (inspNextId++),
     type: t.id, pts, area, length, meta,
-    drawMode: savedDrawMode,  // 'line'|'curve'|'rect'|'circle' 저장
+    drawMode: _inspPendingDrawMode || inspDrawMode,
   });
+  _inspPendingDrawMode = null;
 
   _inspPendingPts = null;
-  _inspPendingDrawMode = null;
   document.getElementById('insp-modal-overlay').classList.remove('show');
   inspRedraw();
   inspRenderHistory();
@@ -1832,12 +1819,12 @@ function inspRedraw() {
     if (!t || !d.pts || d.pts.length < 2) return;
     const isSelected = _inspSelectedIdx === idx;
     const canvasPts = _ptsToCanvas(d.pts);
-    // drawMode 기반 렌더: curve/line → polyline, rect/circle/polygon → polygon
+    // drawMode 기반: curve/line → polyline, 나머지 → t.mode
     const renderMode = (d.drawMode === 'curve' || d.drawMode === 'line') ? 'polyline' : t.mode;
     inspDrawShape(ctx, canvasPts, t.color, renderMode, false, isSelected);
     inspDrawLabel(ctx, { ...d, pts: canvasPts }, t, idx + 1);
+    if (isSelected && d.meta && d.meta._isCircle) inspDrawRotateHandle(ctx, canvasPts, d.meta._rotation || 0);
   });
-  // 실시간 손상물량표 오버레이
   if (damages.length > 0 && inspImgEl) inspDrawDamageTable(ctx, dc.width, dc.height, damages);
 }
 function inspRedrawPreview(mp) {
@@ -1862,21 +1849,17 @@ function inspDrawShape(ctx, pts, color, mode, preview, selected) {
     pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
     ctx.stroke();
   } else {
-    ctx.fillStyle = color + (selected ? '50' : '30');
+    ctx.fillStyle = color + '30';
     ctx.beginPath();
     pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
     ctx.closePath(); ctx.fill(); ctx.stroke();
   }
-  ctx.shadowBlur = 0;
-  // 꼭짓점 점: preview 시에만 표시
-  if (preview) {
-    ctx.fillStyle = color;
-    pts.forEach(p => {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 2 * d, 0, Math.PI * 2);
-      ctx.fill();
-    });
-  }
+  ctx.fillStyle = color;
+  pts.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, (preview ? 2 : 3) * d, 0, Math.PI * 2);
+    ctx.fill();
+  });
   ctx.restore();
 }
 function inspDrawLabel(ctx, d, t, no) {
@@ -2193,8 +2176,10 @@ document.addEventListener('keydown', e => {
 ══════════════════════════════════════════ */
 function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
   if (!damages || damages.length === 0) return;
+  if (!inspImgEl) return;
+
   const idr = inspImgDrawRect;
-  if (!idr || !inspImgEl) return;
+  if (!idr) return;
 
   // ── 고정값 (이미지 원본 6300×4455px 기준) ──
   const ORIG_H    = inspImgEl.naturalHeight;
@@ -2204,7 +2189,6 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
   const rowY1     = idr.dy + ROW_Y1_PX * imgScale;
   const rowH      = ROW_H_PX * imgScale;
 
-  // 열 중앙 X좌표 (6300px 기준 비율)
   const COL_CENTERS = [0.69675, 0.7146, 0.7723, 0.82873, 0.84952, 0.86921, 0.88579, 0.90476, 0.92325, 0.94405];
   const COL_KEYS    = ['no','round','content','widthDepth','length','width','count','qty','unit','note'];
   const colCentersPx = COL_CENTERS.map(r => idr.dx + r * idr.dw);
@@ -2212,9 +2196,9 @@ function inspDrawDamageTable(ctx, canvasW, canvasH, damages) {
   const fontSize = Math.max(7, Math.round(rowH * 0.52));
   ctx.save();
   ctx.font = `${fontSize}px 'Noto Sans KR', sans-serif`;
-  ctx.fillStyle = '#000000';
+  ctx.fillStyle    = '#000000';
   ctx.textBaseline = 'middle';
-  ctx.textAlign = 'center';
+  ctx.textAlign    = 'center';
 
   damages.forEach((d, idx) => {
     const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
