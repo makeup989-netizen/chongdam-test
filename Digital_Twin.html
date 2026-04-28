@@ -1491,6 +1491,9 @@ function inspOpen(entry) {
   const fs = document.getElementById('insp-fullscreen');
   fs.classList.add('show');
 
+  // 이전 작업에서 표 위치 설정 가이드가 남아있으면 입력이 잠기므로 항상 초기화
+  inspTableSetEnd();
+
   // 오픈 시 hover 정리 (3D 캔버스가 덮이면서 mouseleave 미발생)
   clearHover();
 
@@ -1508,6 +1511,8 @@ function inspOpen(entry) {
 
 /* 전체화면 닫기 → Digital Twin 복귀 */
 function inspClose() {
+  // 닫을 때도 가이드 모드를 정리해 다음 오픈에서 입력 잠김 방지
+  inspTableSetEnd();
   document.getElementById('insp-fullscreen').classList.remove('show');
   // 조사 탭 버튼 비활성화
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -2203,10 +2208,13 @@ PNG 내보내기 시 데이터 수만큼 자동으로 채워집니다.`);
 function inspTableSetEnd() {
   _inspTableSetStep = 0; _inspTableP1 = null;
   const guide = document.getElementById('insp-table-guide');
+  if (!guide) return;
   guide.classList.remove('active');
   guide.onclick = null; guide.onmousemove = null;
-  document.getElementById('insp-table-preview').style.display = 'none';
-  document.getElementById('insp-table-set-btn').classList.remove('active');
+  const preview = document.getElementById('insp-table-preview');
+  if (preview) preview.style.display = 'none';
+  const btn = document.getElementById('insp-table-set-btn');
+  if (btn) btn.classList.remove('active');
 }
 
 // ESC로 표 위치 설정 취소
