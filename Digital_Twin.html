@@ -284,7 +284,13 @@
   #insp-close-btn:hover { border-color: var(--danger); color: var(--danger); }
 
   /* 본문: 좌측 목록 | 중앙 캔버스 | 우측 이력 */
-  #insp-body { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+  #insp-body { 
+    display: flex;
+    flex: 1 1 auto;
+    overflow: hidden;
+    min-height: 0;
+    width: 100%;
+  }
 
   /* 좌측 부재 목록 */
   #insp-member-list {
@@ -314,7 +320,14 @@
   .insp-member-btn.active { border-left-color: var(--accent); color: var(--accent); background: rgba(0,229,204,.06); }
 
   /* 중앙 영역 */
-  #insp-center { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+  #insp-center { 
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+  }
 
   /* 툴바 */
   #insp-toolbar {
@@ -344,16 +357,32 @@
     position: relative; flex: 1 1 auto;
     overflow: hidden; background: #080C14;
     cursor: crosshair; min-height: 0;
+    display: flex;
+    align-items: stretch;
+    justify-content: stretch;
   }
   #insp-img-canvas, #insp-draw-canvas {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: auto;
+    display: block;
+  }
+  #insp-draw-canvas {
+    z-index: 5;
   }
   #insp-overlay {
     position: absolute; inset: 0;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     color: var(--textMut); font-family: var(--mono);
-    font-size: 12px; gap: 10px; pointer-events: none; letter-spacing: .06em;
+    font-size: 12px; gap: 10px; 
+    pointer-events: auto;
+    letter-spacing: .06em;
+    background: rgba(8,12,20,0.8);
+    z-index: 50;
+  }
+  #insp-overlay.hidden {
+    display: none;
+    pointer-events: none;
   }
 
   /* 우측 손상이력 */
@@ -1465,7 +1494,9 @@ function inspOpen(entry) {
   clearHover();
 
   // 전체화면 렌더링 완료 후 캔버스 크기 확정 → 이미지 로드
+  // 레이아웃 계산을 위해 여러 프레임 기다리기
   requestAnimationFrame(() => {
+    inspSyncSize();
     requestAnimationFrame(() => {
       inspSyncSize();
       if (entry) inspSelectEntry(entry);
@@ -1504,12 +1535,14 @@ function inspSelectEntry(entry) {
   const imgCanvas = document.getElementById('insp-img-canvas');
   const overlay   = document.getElementById('insp-overlay');
   const msgEl     = document.getElementById('insp-overlay-msg');
+  overlay.classList.remove('hidden');
   overlay.style.display = 'flex';
   msgEl.textContent = '이미지 로딩 중...';
 
   const img = new Image();
   img.onload = () => {
     inspImgEl = img;
+    overlay.classList.add('hidden');
     overlay.style.display = 'none';
     // 레이아웃 확정 후 캔버스 크기 재측정 → 이미지가 항상 전체 영역에 꽉 차게
     requestAnimationFrame(() => {
@@ -1521,6 +1554,7 @@ function inspSelectEntry(entry) {
   };
   img.onerror = () => {
     msgEl.textContent = `이미지를 불러올 수 없습니다: ${entry.imageFile}`;
+    overlay.style.display = 'flex';
   };
   img.src = INSP_BASE + encodeURIComponent(entry.imageFile) + '?_=' + Date.now();
 }
@@ -1532,13 +1566,18 @@ function inspSyncSize() {
   const wrap = document.getElementById('insp-canvas-wrap');
   const w = wrap.clientWidth  || 280;
   const h = wrap.clientHeight || 300;
+  
   ['insp-img-canvas', 'insp-draw-canvas'].forEach(id => {
     const c = document.getElementById(id);
+    if (!c) return;
     c.width  = Math.round(w * INSP_DPR);
     c.height = Math.round(h * INSP_DPR);
     c.style.width  = w + 'px';
     c.style.height = h + 'px';
+    c.style.pointerEvents = 'auto';  // 마우스 이벤트 활성화
+    c.style.display = 'block';       // 캔버스 표시 확인
   });
+  
   if (inspImgEl) { inspDrawImg(); inspRedraw(); }
 }
 
@@ -1582,6 +1621,10 @@ function inspPtT(e) {
 /* 이벤트 바인딩 (DOM 준비 후 1회 실행) */
 function inspBindEvents() {
   const dc = document.getElementById('insp-draw-canvas');
+  if (!dc) {
+    console.error('[외관조사망도] insp-draw-canvas 요소를 찾을 수 없습니다');
+    return;
+  }
 
   // 마우스 — 꼭짓점
   dc.addEventListener('mousedown', e => {
