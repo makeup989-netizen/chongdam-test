@@ -247,6 +247,41 @@
   /* ── 외관조사망도 탭 (항상 표시) ── */
   #tab-inspection-btn { display: flex; }
 
+  /* 부재 정보 패널 */
+  .member-info-section { margin-bottom: 12px; }
+  .member-info-label {
+    font-family: var(--mono); font-size: 9px; letter-spacing: .1em;
+    color: var(--textMut); text-transform: uppercase; margin-bottom: 4px;
+  }
+  .member-info-value {
+    font-family: var(--mono); font-size: 11px; color: var(--text);
+    background: rgba(255,255,255,.04); border: 1px solid var(--border);
+    border-radius: 4px; padding: 6px 10px; word-break: break-all; line-height: 1.6;
+  }
+  .member-info-value.accent { color: var(--accent); border-color: rgba(0,229,204,.3); }
+  .member-grade-badge {
+    display: inline-block; padding: 3px 10px; border-radius: 4px;
+    font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: .05em;
+  }
+  .member-dmg-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 10px;
+    font-family: var(--mono); color: var(--textMut);
+  }
+  .member-dmg-row:last-child { border-bottom: none; }
+  .member-dmg-dot {
+    width: 7px; height: 7px; border-radius: 2px;
+    display: inline-block; margin-right: 5px; vertical-align: middle;
+  }
+  .member-info-open-btn {
+    width: 100%; margin-top: 6px; padding: 7px;
+    background: transparent; border: 1px solid var(--accent);
+    color: var(--accent); font-family: var(--mono); font-size: 10px;
+    border-radius: 4px; cursor: pointer; letter-spacing: .06em;
+    transition: background .15s;
+  }
+  .member-info-open-btn:hover { background: rgba(0,229,204,.12); }
+
   .insp-list-search {
     width:100%; box-sizing:border-box;
     background:var(--bg); border:1px solid var(--border);
@@ -593,16 +628,10 @@
     </div>
     <div class="panel-content" id="tab-sensors"></div>
     <div class="panel-content" id="tab-info" style="display:none">
-   <div class="sensor-section-title">프로젝트 정보</div>
-   <div class="sensor-card" style="--card-color:#7B5EA7">
-   <div class="sc-type" style="color:var(--text);line-height:1.7">
-   청담대교 계측 센서 모니터링<br>
-   Revit 2026 Add-in 연계<br><br>
-   <span style="color:var(--textMut)">데이터 주기:</span> 10분 간격<br>
-   <span style="color:var(--textMut)">센서 종류:</span> 5종 14채널<br>
-   <span style="color:var(--textMut)">모델:</span> Revit IFC → GLB 변환
-   </div>
-   </div>
+      <div id="member-info-placeholder" style="color:var(--textMut);font-family:var(--mono);font-size:10px;padding:16px 4px;text-align:center;line-height:1.8;">
+        3D 모델의 부재를<br>클릭하면 정보가 표시됩니다
+      </div>
+      <div id="member-info-panel" style="display:none;"></div>
     </div>
 
     <!-- 조사 탭 패널 -->
@@ -1234,20 +1263,20 @@ canvas.addEventListener('click', e => {
    // 디버그: 콘솔에서 클릭된 부재 확인
    console.log(`[클릭] GlobalId: ${globalId} → code: ${code || '(매핑없음)'}`);
 
-   // 하이라이트 적용 (code 매핑 여부와 무관하게 클릭된 부재 강조)
+   // 하이라이트 적용
    highlightMesh(hitMesh);
 
+   // Info 탭에 부재 정보 표시 (항상)
+   showMemberInfo(globalId, code);
+
    if (code) {
-   const found = inspOpenByMemberId(code);
-   if (!found) {
-   // 매핑은 있는 code지만 inspection_map에 없는 경우
-   console.log(`[조사망도] inspection_map에 code 없음: ${code}`);
-   restoreHighlight();
-   }
+     const found = inspFindEntry(code);
+     if (!found) {
+       console.log(`[조사망도] inspection_map에 code 없음: ${code}`);
+     }
    } else {
-   // member_codes.json에 GlobalId 없음 → 하이라이트만 잠깐 표시 후 복원
-   console.log(`[조사망도] member_codes에 GlobalId 없음: ${globalId}`);
-   setTimeout(restoreHighlight, 800);
+     console.log(`[조사망도] member_codes에 GlobalId 없음: ${globalId}`);
+     setTimeout(restoreHighlight, 800);
    }
     } else {
    // 빈 곳 클릭 → 하이라이트 해제
@@ -1255,6 +1284,108 @@ canvas.addEventListener('click', e => {
     }
   }
 });
+
+/* 부재 정보 패널 렌더링 */
+function showMemberInfo(globalId, code) {
+  const placeholder = document.getElementById('member-info-placeholder');
+  const panel       = document.getElementById('member-info-panel');
+  if (!placeholder || !panel) return;
+
+  placeholder.style.display = 'none';
+  panel.style.display = 'block';
+  panel.innerHTML = '';
+
+  const grade      = memberGrades[globalId] || null;
+  const inspEntry  = code ? inspFindEntry(code) : null;
+  const damages    = inspEntry ? (inspDamages[inspEntry.imageFile] || []) : [];
+
+  // 등급 색상 맵
+  const gradeColors = { A:'#4CAF50', B:'#8BC34A', C:'#FFC107', D:'#FF9800', E:'#F44336' };
+  const gradeColor  = grade ? (gradeColors[grade] || '#888') : null;
+
+  // ── 부재 ID ──
+  panel.innerHTML += `
+    <div class="member-info-section">
+      <div class="member-info-label">부재 코드</div>
+      <div class="member-info-value accent">${code || '(매핑 없음)'}</div>
+    </div>
+    <div class="member-info-section">
+      <div class="member-info-label">Revit GlobalId</div>
+      <div class="member-info-value" style="font-size:9px;">${globalId}</div>
+    </div>`;
+
+  // ── 상태 등급 ──
+  panel.innerHTML += `
+    <div class="member-info-section">
+      <div class="member-info-label">상태 등급</div>
+      <div class="member-info-value">
+        ${grade
+          ? `<span class="member-grade-badge" style="background:${gradeColor}22;color:${gradeColor};border:1px solid ${gradeColor}55;">등급 ${grade}</span>`
+          : '<span style="color:var(--textMut);">—</span>'}
+      </div>
+    </div>`;
+
+  // ── 외관조사망도 연결 ──
+  panel.innerHTML += `
+    <div class="member-info-section">
+      <div class="member-info-label">외관조사망도</div>
+      <div class="member-info-value">
+        ${inspEntry
+          ? `<span style="color:var(--accent);">✓</span> ${inspEntry.label}<br>
+             <span style="color:var(--textMut);font-size:9px;">${inspEntry.imageFile}</span>`
+          : '<span style="color:var(--textMut);">연결 없음</span>'}
+      </div>
+    </div>`;
+
+  // ── 손상 기록 ──
+  const dmgSection = document.createElement('div');
+  dmgSection.className = 'member-info-section';
+  dmgSection.innerHTML = `<div class="member-info-label">손상 기록 (${damages.length}건)</div>`;
+
+  if (damages.length > 0) {
+    const dmgBox = document.createElement('div');
+    dmgBox.className = 'member-info-value';
+    dmgBox.style.padding = '4px 10px';
+
+    // 유형별 집계
+    const summary = {};
+    damages.forEach(d => {
+      const t = INSP_DAMAGE_TYPES.find(x => x.id === d.type);
+      if (!t) return;
+      if (!summary[d.type]) summary[d.type] = { label: t.label, color: t.color, count: 0 };
+      summary[d.type].count++;
+    });
+
+    Object.values(summary).forEach(s => {
+      const row = document.createElement('div');
+      row.className = 'member-dmg-row';
+      row.innerHTML = `
+        <span><span class="member-dmg-dot" style="background:${s.color};"></span>${s.label}</span>
+        <span style="color:var(--text);">${s.count}건</span>`;
+      dmgBox.appendChild(row);
+    });
+    dmgSection.appendChild(dmgBox);
+  } else {
+    dmgSection.innerHTML += `<div class="member-info-value" style="color:var(--textMut);">기록 없음</div>`;
+  }
+  panel.appendChild(dmgSection);
+
+  // ── 외관조사망도 열기 버튼 ──
+  if (inspEntry) {
+    const btn = document.createElement('button');
+    btn.className = 'member-info-open-btn';
+    btn.textContent = '🔍 외관조사망도 열기';
+    btn.onclick = () => inspOpen(inspEntry);
+    panel.appendChild(btn);
+  }
+
+  // Info 탭으로 자동 전환
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-btn-info').classList.add('active');
+  document.getElementById('tab-sensors').style.display    = 'none';
+  document.getElementById('tab-info').style.display       = 'block';
+  document.getElementById('tab-inspection').style.display = 'none';
+}
 
 function setView(v) {
   document.querySelectorAll('.ctrl-btn').forEach(b=>b.classList.remove('active'));
