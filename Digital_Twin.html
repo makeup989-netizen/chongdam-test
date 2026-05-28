@@ -814,33 +814,37 @@ const GRADE_COLORS = {
   'e': 0xF44336,
 };
 
-// 하이라이트 상태
-let highlightedMesh  = null;   // 현재 하이라이트된 mesh
-let highlightedOrigMat  = null;   // 원본 재질 객체 (clone 전)
+// 하이라이트 상태 (다중 mesh 지원)
+let highlightedItems = [];   // [{mesh, origMat}, ...]
 
-// 부재 하이라이트 적용
-function highlightMesh(mesh) {
-  clearHover();  // hover 재질 먼저 원복 (원본 재질 복원)
-  restoreHighlight();  // 이전 click 하이라이트 원복
-  if (!mesh || !mesh.material) return;
-
-  // clearHover/restoreHighlight 후 mesh.material이 원본 재질임을 보장
-  highlightedMesh  = mesh;
-  highlightedOrigMat = mesh.material;  // 원본 재질 참조 보존
-
-  const hlMat = mesh.material.clone();
-  hlMat.color.setHex(0xFFFFFF);
-  hlMat.emissive.setHex(0x00E5CC);
-  hlMat.emissiveIntensity = 0.9;
-  mesh.material = hlMat;
+// 부재 하이라이트 적용 (단일 mesh 또는 mesh 배열)
+function highlightMesh(meshOrMeshes) {
+  clearHover();           // hover 재질 먼저 원복
+  restoreHighlight();     // 이전 click 하이라이트 원복
+  const meshes = Array.isArray(meshOrMeshes) ? meshOrMeshes : [meshOrMeshes];
+  meshes.forEach(mesh => {
+    if (!mesh || !mesh.material) return;
+    const origMat = mesh.material;
+    const hlMat = origMat.clone();
+    hlMat.color.setHex(0xFFFFFF);
+    hlMat.emissive.setHex(0x00E5CC);
+    hlMat.emissiveIntensity = 0.9;
+    mesh.material = hlMat;
+    highlightedItems.push({ mesh, origMat });
+  });
 }
 
-// 하이라이트 원복 — 원본 재질 객체 자체를 복원
+// 하이라이트 원복 — 모든 mesh 원본 재질 복원
 function restoreHighlight() {
-  if (!highlightedMesh || !highlightedOrigMat) return;
-  highlightedMesh.material = highlightedOrigMat;  // 원본 재질로 완전 교체
-  highlightedMesh  = null;
-  highlightedOrigMat = null;
+  highlightedItems.forEach(({ mesh, origMat }) => {
+    if (mesh && origMat) mesh.material = origMat;
+  });
+  highlightedItems = [];
+}
+
+// 현재 하이라이트된 mesh인지 확인
+function _isHighlighted(mesh) {
+  return highlightedItems.some(h => h.mesh === mesh);
 }
 
 // ── Hover 하이라이트 (마우스 올렸을 때) ──
@@ -848,7 +852,7 @@ let hoveredMesh  = null;
 let hoveredOrigMat = null;   // 원본 재질 보존
 
 function hoverMesh(mesh) {
-  if (mesh === highlightedMesh) { clearHover(); return; }
+  if (_isHighlighted(mesh)) { clearHover(); return; }
   if (mesh === hoveredMesh) return;
   clearHover();
   if (!mesh || !mesh.material) return;
@@ -1792,34 +1796,36 @@ function memberRenderList() {
 
 // 부재 타입별 추천 시점 (theta=수평회전, phi=수직각도)
 const MEMBER_VIEW_ANGLES = {
-  CB: { theta: -Math.PI/8, phi: -Math.PI/3   }, // 가로보 - 아래에서 위
+  CB: { theta: -Math.PI/4, phi: -Math.PI/8   }, // 가로보 - 사선 아래
   VL: { theta: -Math.PI/2, phi:  Math.PI/12  }, // V-Leg - 좌측에서 우측
-  GD: { theta: -Math.PI/8, phi: -Math.PI/3   }, // 거더 - 아래에서 위
-  TB: { theta: -Math.PI/8, phi: -Math.PI/3   }, // 횡박스 - 아래에서 위
+  GD: { theta: -Math.PI/4, phi: -Math.PI/8   }, // 거더 - 사선 아래
+  TB: { theta: -Math.PI/4, phi: -Math.PI/8   }, // 횡박스 - 사선 아래
   PI: { theta:  Math.PI/2, phi:  Math.PI/12  }, // 교각 - 우측에서 좌측
   RD: { theta:  0,         phi:  Math.PI/2.2 }, // 교면포장 - 위에서 아래
   DK: { theta:  0,         phi: -Math.PI/3   }, // 바닥판 - 아래에서 위
 };
 
-// 리스트 클릭 → 3D 부재 하이라이트 + INFO 탭 표시 + 카메라 포커스
+// 리스트 클릭 → 같은 code의 모든 mesh 하이라이트 + INFO 탭 + 카메라 포커스
 function memberSelectByGlobalId(globalId) {
-  let target = null;
-  bridgeGroup.traverse(c => { if (c.isMesh && c.name === globalId && !target) target = c; });
-  if (!target) {
-    console.warn(`[부재] globalId ${globalId} 에 해당하는 mesh 없음`);
-    return;
-  }
-  highlightMesh(target);
-  showMemberInfo(globalId, memberCodes[globalId] || '');
-
-  // 같은 code의 모든 mesh를 합쳐서 카메라 포커스
   const code = memberCodes[globalId] || '';
-  const memberType = (_memParseCode(code) || {}).type;
+  // 같은 code 공유하는 모든 mesh 수집
   const meshes = [];
   if (code) {
     bridgeGroup.traverse(c => { if (c.isMesh && memberCodes[c.name] === code) meshes.push(c); });
   }
-  focusOnMeshes(meshes.length ? meshes : [target], memberType);
+  // code 없으면 globalId 단일 mesh만
+  if (!meshes.length) {
+    bridgeGroup.traverse(c => { if (c.isMesh && c.name === globalId) meshes.push(c); });
+  }
+  if (!meshes.length) {
+    console.warn(`[부재] globalId ${globalId} 에 해당하는 mesh 없음`);
+    return;
+  }
+  highlightMesh(meshes);  // 배열 전체 하이라이트
+  showMemberInfo(globalId, code);
+
+  const memberType = (_memParseCode(code) || {}).type;
+  focusOnMeshes(meshes, memberType);
 }
 
 // 가장 짧은 방향으로 각도 보간 (-π ~ π 한 바퀴 안 돌게)
@@ -3473,12 +3479,15 @@ function animate() {
     renderer.setSize(W,H,false);
     camera.aspect=W/H;camera.updateProjectionMatrix();
   }
-  // 클릭 하이라이트 펄스 (강하게)
-  if (highlightedMesh && highlightedMesh.material) {
-    highlightedMesh.material.emissiveIntensity = 0.6 + Math.sin(t * 4) * 0.35;
+  // 클릭 하이라이트 펄스 (강하게) — 모든 하이라이트 mesh에 적용
+  if (highlightedItems.length) {
+    const pulse = 0.6 + Math.sin(t * 4) * 0.35;
+    highlightedItems.forEach(({ mesh }) => {
+      if (mesh && mesh.material) mesh.material.emissiveIntensity = pulse;
+    });
   }
   // hover 하이라이트 펄스 (부드럽게)
-  if (hoveredMesh && hoveredMesh.material && hoveredMesh !== highlightedMesh) {
+  if (hoveredMesh && hoveredMesh.material && !_isHighlighted(hoveredMesh)) {
     hoveredMesh.material.emissiveIntensity = 0.25 + Math.sin(t * 3) * 0.12;
   }
 
