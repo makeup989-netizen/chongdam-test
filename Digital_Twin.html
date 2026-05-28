@@ -1790,7 +1790,7 @@ function memberRenderList() {
   });
 }
 
-// 리스트 클릭 → 3D 부재 하이라이트 + INFO 탭 표시
+// 리스트 클릭 → 3D 부재 하이라이트 + INFO 탭 표시 + 카메라 포커스
 function memberSelectByGlobalId(globalId) {
   let target = null;
   bridgeGroup.traverse(c => { if (c.isMesh && c.name === globalId && !target) target = c; });
@@ -1800,6 +1800,45 @@ function memberSelectByGlobalId(globalId) {
   }
   highlightMesh(target);
   showMemberInfo(globalId, memberCodes[globalId] || '');
+
+  // 같은 code의 모든 mesh를 합쳐서 카메라 포커스
+  const code = memberCodes[globalId];
+  const meshes = [];
+  if (code) {
+    bridgeGroup.traverse(c => { if (c.isMesh && memberCodes[c.name] === code) meshes.push(c); });
+  }
+  focusOnMeshes(meshes.length ? meshes : [target]);
+}
+
+// 부재 mesh들의 월드 bounding box 중심으로 카메라 부드럽게 이동
+let _focusAnimId = null;
+function focusOnMeshes(meshes) {
+  if (!meshes || !meshes.length) return;
+  const box = new THREE.Box3();
+  meshes.forEach(m => box.expandByObject(m));
+  if (box.isEmpty()) return;
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const targetRadius = Math.max(maxDim * 2.2, 25);
+
+  const startPanX = panX, startPanY = panY, startPanZ = panZ;
+  const startRadius = radius;
+  const t0 = performance.now();
+  const duration = 700;
+  if (_focusAnimId) cancelAnimationFrame(_focusAnimId);
+  function step() {
+    const u = Math.min(1, (performance.now() - t0) / duration);
+    // easeInOutCubic
+    const e = u < 0.5 ? 4*u*u*u : 1 - Math.pow(-2*u + 2, 3) / 2;
+    panX  = startPanX  + (center.x      - startPanX ) * e;
+    panY  = startPanY  + (center.y      - startPanY ) * e;
+    panZ  = startPanZ  + (center.z      - startPanZ ) * e;
+    radius = startRadius + (targetRadius - startRadius) * e;
+    if (u < 1) _focusAnimId = requestAnimationFrame(step);
+    else _focusAnimId = null;
+  }
+  step();
 }
 
 /* ══════════════════════════════════════════════════════
