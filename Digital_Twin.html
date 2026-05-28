@@ -1241,7 +1241,7 @@ window.addEventListener('mousemove', e => {
     panY += dy*panSpeed*100;
   } else {
     theta -= dx;
-    phi = Math.max(0.1, Math.min(Math.PI/2.1, phi+dy));
+    phi = Math.max(-Math.PI/2 + 0.05, Math.min(Math.PI/2 - 0.05, phi+dy));
   }
   prevX=e.clientX; prevY=e.clientY;
 });
