@@ -309,6 +309,35 @@
   }
   .insp-list-item-badge.has-damage { background:rgba(226,75,74,.15); color:#E24B4A; }
 
+  /* ── 부재 탭 (members) ── */
+  .mem-chips { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px; }
+  .mem-chip {
+    font-family:var(--mono); font-size:9px; letter-spacing:.05em;
+    padding:4px 9px; border:1px solid var(--border); border-radius:11px;
+    color:var(--textMut); cursor:pointer; user-select:none;
+    transition:border-color .15s, background .15s, color .15s;
+  }
+  .mem-chip:hover { border-color:var(--accent); color:var(--accent); }
+  .mem-chip.active { background:var(--accent); border-color:var(--accent); color:#080C14; }
+  .mem-select {
+    width:100%; box-sizing:border-box;
+    background:var(--bg); border:1px solid var(--border); color:var(--text);
+    font-family:var(--mono); font-size:11px; padding:6px 8px; border-radius:4px;
+    margin-bottom:6px; outline:none;
+  }
+  .mem-select:focus { border-color:var(--accent); }
+  .mem-count {
+    color:var(--textMut); font-family:var(--mono); font-size:9px;
+    padding:2px 2px 6px; letter-spacing:.05em;
+  }
+  .mem-list-item-code { font-family:var(--mono); font-size:10px; color:var(--text); line-height:1.4; }
+  .mem-list-item-sub { font-size:9px; color:var(--textMut); margin-top:2px; letter-spacing:.04em; }
+  .mem-grade-badge {
+    display:inline-block; padding:2px 6px; border-radius:9px;
+    font-family:var(--mono); font-size:9px; font-weight:600;
+    color:#fff; margin-left:6px; white-space:nowrap;
+  }
+
   /* ── 전체화면 오버레이 ── */
   #insp-fullscreen {
     display: none;
@@ -624,6 +653,7 @@
     <div class="panel-tabs">
    <div class="tab active" id="tab-btn-sensors"  onclick="switchTab(this,'sensors')">SENSORS</div>
    <div class="tab"  id="tab-btn-info"  onclick="switchTab(this,'info')">INFO</div>
+   <div class="tab"  id="tab-btn-members"  onclick="switchTab(this,'members')">🔧 부재</div>
    <div class="tab"  id="tab-inspection-btn"  onclick="switchTab(this,'inspection')">🔍 조사</div>
     </div>
     <div class="panel-content" id="tab-sensors"></div>
@@ -632,6 +662,16 @@
         3D 모델의 부재를<br>클릭하면 정보가 표시됩니다
       </div>
       <div id="member-info-panel" style="display:none;"></div>
+    </div>
+
+    <!-- 부재 탭 패널 -->
+    <div class="panel-content" id="tab-members" style="display:none">
+      <input class="insp-list-search" id="mem-list-search"
+        placeholder="🔍  코드 검색 (CB, P40 등)" oninput="memberRenderList()">
+      <div id="mem-type-chips" class="mem-chips"></div>
+      <select id="mem-segment-select" class="mem-select"></select>
+      <div id="mem-count-label" class="mem-count">—</div>
+      <div id="mem-list-body"></div>
     </div>
 
     <!-- 조사 탭 패널 -->
@@ -941,19 +981,16 @@ fillLight.position.set(-100, 50, -100);
 scene.add(fillLight);
 scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 0.8));
 
-// ── 위성 지형 평면 (Google Maps XYZ 타일 방식) ──
-// ※ YOUR_GOOGLE_MAPS_API_KEY 부분을 발급받은 API 키로 교체하세요
-const GOOGLE_MAPS_API_KEY = 'YOUR_GOOGLE_MAPS_API_KEY';
+// ── 위성 지형 평면 (VWorld 2D WMTS 타일) ──
+const VWORLD_API_KEY = '7F89AF6D-F5D3-3FF8-B6B3-08D46B9B5DE0';
 
 // 청담대교 본선 구간 중심 좌표 (WGS84)
 const BRIDGE_LAT = 37.526977;
 const BRIDGE_LNG = 127.064591;
 
-// 초기 플레이스홀더
+// 초기 플레이스홀더 (조명 영향 없음: 위성 텍스처 원색 유지)
 const terrainGeo = new THREE.PlaneGeometry(3000, 3000, 1, 1);
-const terrainMat = new THREE.MeshStandardMaterial({
-  color: 0x1a3a2a, roughness: 1.0, metalness: 0.0
-});
+const terrainMat = new THREE.MeshBasicMaterial({ color: 0x1a3a2a });
 const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
 terrainMesh.rotation.x = -Math.PI / 2;
 scene.add(terrainMesh);
@@ -976,21 +1013,48 @@ function tileXYToLatLng(tileX, tileY, zoom) {
   return { lat, lng };
 }
 
-// Google Maps XYZ 타일로 청담대교 5km 이내 위성 이미지 로드
-// zoom 16: 타일 1장 = 약 2,400m, 5×5 = 25장으로 5km 반경 커버
-async function loadSatelliteTerrain(modelSize) {
-  const ZOOM  = 16;  // 5km 반경 고화질 zoom
-  const TILE_PX = 256;   // XYZ 타일 1장 = 256px
+// VWorld WMTS 타일 URL
+// layer: Satellite(위성) | Base(일반) | gray | midnight | Hybrid(라벨 오버레이)
+function vworldTileUrl(layer, z, x, y) {
+  const ext = (layer === 'Satellite') ? 'jpeg' : 'png';
+  return `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_API_KEY}/${layer}/${z}/${y}/${x}.${ext}`;
+}
 
-  // zoom 16, 위도 37° 기준 1타일의 실제 거리 (미터)
+// 한 종류 레이어의 타일 그리드를 canvas에 합성 (drawImage)
+function _drawTileLayer(ctx, layer, ZOOM, center, COLS_HALF, ROWS_HALF, TILE_PX) {
+  const tasks = [];
+  for (let dy = -ROWS_HALF; dy <= ROWS_HALF; dy++) {
+    for (let dx = -COLS_HALF; dx <= COLS_HALF; dx++) {
+      const tx = center.tileX + dx;
+      const ty = center.tileY + dy;
+      const url = vworldTileUrl(layer, ZOOM, tx, ty);
+      const px = (dx + COLS_HALF) * TILE_PX;
+      const py = (dy + ROWS_HALF) * TILE_PX;
+      tasks.push(new Promise(resolve => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload  = () => { ctx.drawImage(img, px, py, TILE_PX, TILE_PX); resolve(); };
+        img.onerror = () => resolve();
+        img.src = url;
+      }));
+    }
+  }
+  return Promise.all(tasks);
+}
+
+// VWorld 위성+Hybrid 합성 텍스처 로드 (zoom 16, 약 10km × 10km 커버)
+async function loadSatelliteTerrain(modelSize) {
+  const ZOOM  = 16;
+  const TILE_PX = 256;
+
+  // zoom 16, 위도 37° 기준 1 타일 ≈ 488m
   const TILE_M = 2 * Math.PI * 6378137 * Math.cos(BRIDGE_LAT * Math.PI / 180) / Math.pow(2, ZOOM);
 
-  // 청담대교 중심 타일 번호
   const center = latLngToTileXY(BRIDGE_LAT, BRIDGE_LNG, ZOOM);
 
-  // 5km 반경 커버: 5×5 = 25장
-  const COLS_HALF = 2;   // 좌우 2장씩 = 총 5장
-  const ROWS_HALF = 2;   // 상하 2장씩 = 총 5장
+  // 21×21 = 441장, 약 10.2km × 10.2km 커버
+  const COLS_HALF = 10;
+  const ROWS_HALF = 10;
   const COLS = COLS_HALF * 2 + 1;
   const ROWS = ROWS_HALF * 2 + 1;
 
@@ -1002,34 +1066,15 @@ async function loadSatelliteTerrain(modelSize) {
   ctx.fillStyle = '#1a3a4a';
   ctx.fillRect(0, 0, cvs.width, cvs.height);
 
-  // XYZ 타일 병렬 로드
-  const promises = [];
-  for (let dy = -ROWS_HALF; dy <= ROWS_HALF; dy++) {
-    for (let dx = -COLS_HALF; dx <= COLS_HALF; dx++) {
-   const tx = center.tileX + dx;
-   const ty = center.tileY + dy;
-   const url = `https://maps.googleapis.com/maps/vt?lyrs=s,h&x=${tx}&y=${ty}&z=${ZOOM}&key=${GOOGLE_MAPS_API_KEY}`;
-   const px  = (dx + COLS_HALF) * TILE_PX;
-   const py  = (dy + ROWS_HALF) * TILE_PX;
+  // 1차: 위성 영상
+  await _drawTileLayer(ctx, 'Satellite', ZOOM, center, COLS_HALF, ROWS_HALF, TILE_PX);
+  // 2차: Hybrid 라벨/도로 오버레이 (투명 PNG)
+  await _drawTileLayer(ctx, 'Hybrid',    ZOOM, center, COLS_HALF, ROWS_HALF, TILE_PX);
 
-   promises.push(new Promise(resolve => {
-   const img = new Image();
-   img.crossOrigin = 'anonymous';
-   img.onload  = () => { ctx.drawImage(img, px, py, TILE_PX, TILE_PX); resolve(); };
-   img.onerror = () => resolve();
-   img.src = url;
-   }));
-    }
-  }
-
-  await Promise.all(promises);
-
-  // Three.js 텍스처 적용
+  // Three.js 텍스처 적용 (조명 영향 없는 BasicMaterial: 위성 원색 유지)
   const tex = new THREE.CanvasTexture(cvs);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  terrainMesh.material = new THREE.MeshStandardMaterial({
-    map: tex, roughness: 1.0, metalness: 0.0,
-  });
+  terrainMesh.material = new THREE.MeshBasicMaterial({ map: tex });
   terrainMesh.material.needsUpdate = true;
 
   // 전체 지형 실제 크기 (미터)
@@ -1038,7 +1083,7 @@ async function loadSatelliteTerrain(modelSize) {
   terrainMesh.geometry.dispose();
   terrainMesh.geometry = new THREE.PlaneGeometry(totalW, totalH, 1, 1);
 
-  console.log(`[지형] XYZ 타일 완료 (${COLS}×${ROWS}장, ${(totalW/1000).toFixed(1)}×${(totalH/1000).toFixed(1)}km, zoom ${ZOOM})`);
+  console.log(`[VWorld] 타일 완료 (${COLS}×${ROWS}장, ${(totalW/1000).toFixed(2)}×${(totalH/1000).toFixed(2)}km, zoom ${ZOOM})`);
 }
 // ──────────────────────────────────────────────────
 
@@ -1384,6 +1429,7 @@ function showMemberInfo(globalId, code) {
   document.getElementById('tab-btn-info').classList.add('active');
   document.getElementById('tab-sensors').style.display    = 'none';
   document.getElementById('tab-info').style.display       = 'block';
+  document.getElementById('tab-members').style.display    = 'none';
   document.getElementById('tab-inspection').style.display = 'none';
 }
 
@@ -1539,6 +1585,7 @@ function switchTab(el, tab) {
   el.classList.add('active');
   document.getElementById('tab-sensors').style.display    = tab === 'sensors'    ? 'block' : 'none';
   document.getElementById('tab-info').style.display       = tab === 'info'       ? 'block' : 'none';
+  document.getElementById('tab-members').style.display    = tab === 'members'    ? 'block' : 'none';
   document.getElementById('tab-inspection').style.display = tab === 'inspection' ? 'block' : 'none';
   if (tab === 'inspection') {
     // 검색창 초기화 + 리스트 렌더
@@ -1546,6 +1593,213 @@ function switchTab(el, tab) {
     if (searchEl) searchEl.value = '';
     inspRenderList('');
   }
+  if (tab === 'members') {
+    memberTabEnsureInit();
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   부재 탭 모듈 (members)
+══════════════════════════════════════════════════════ */
+const MEMBER_TYPE_LABELS = {
+  PI: '교각',
+  CB: '가로보',
+  TB: '횡박스',
+  GD: '거더',
+  VL: 'V다리',
+  RD: '교면포장',
+  DK: '바닥판',
+};
+
+let _memInitDone = false;
+let _memIndex = [];                              // [{code, type, segment, globalIds:[]}]
+let _memActiveTypes = new Set(Object.keys(MEMBER_TYPE_LABELS));
+let _memActiveSegment = '';                      // '' = 전체
+
+// "77_TYPE_LOC1_LOC2_SUB1_SUB2" → {type, segment}
+function _memParseCode(code) {
+  if (!code) return null;
+  const p = code.split('_');
+  if (p.length < 4 || p[0] !== '77') return null;
+  return { type: p[1], segment: p[2] + '_' + p[3] };
+}
+
+// memberCodes → code별 그룹핑
+function _memBuildIndex() {
+  const map = new Map();
+  Object.entries(memberCodes).forEach(([gid, code]) => {
+    const parsed = _memParseCode(code);
+    if (!parsed) return;
+    if (!map.has(code)) {
+      map.set(code, { code, type: parsed.type, segment: parsed.segment, globalIds: [] });
+    }
+    map.get(code).globalIds.push(gid);
+  });
+  return Array.from(map.values());
+}
+
+// 부재 탭 초기 진입 시: memberCodes 로드 대기 후 1회 초기화
+function memberTabEnsureInit() {
+  if (_memInitDone) return;
+  if (!memberCodes || Object.keys(memberCodes).length === 0) {
+    setTimeout(memberTabEnsureInit, 200);
+    return;
+  }
+  _memIndex = _memBuildIndex();
+  _memBuildTypeChips();
+  _memBuildSegmentSelect();
+  memberRenderList();
+  _memInitDone = true;
+}
+
+function _memBuildTypeChips() {
+  const wrap = document.getElementById('mem-type-chips');
+  wrap.innerHTML = '';
+  // 전체 칩
+  const all = document.createElement('div');
+  all.className = 'mem-chip active';
+  all.textContent = '전체';
+  all.dataset.role = 'all';
+  all.onclick = () => {
+    _memActiveTypes = new Set(Object.keys(MEMBER_TYPE_LABELS));
+    wrap.querySelectorAll('.mem-chip').forEach(c => c.classList.toggle('active', c.dataset.role === 'all'));
+    memberRenderList();
+  };
+  wrap.appendChild(all);
+  // 타입별 칩 (코드 빈도순)
+  const typesByCount = {};
+  _memIndex.forEach(x => { typesByCount[x.type] = (typesByCount[x.type]||0) + 1; });
+  Object.keys(MEMBER_TYPE_LABELS)
+    .filter(t => typesByCount[t])
+    .sort((a, b) => typesByCount[b] - typesByCount[a])
+    .forEach(t => {
+      const c = document.createElement('div');
+      c.className = 'mem-chip';
+      c.dataset.type = t;
+      c.textContent = `${MEMBER_TYPE_LABELS[t]} (${typesByCount[t]})`;
+      c.onclick = () => {
+        // '전체' 활성 상태였으면 끄고 단일 선택부터 시작
+        if (all.classList.contains('active')) {
+          all.classList.remove('active');
+          _memActiveTypes.clear();
+        }
+        if (_memActiveTypes.has(t)) { _memActiveTypes.delete(t); c.classList.remove('active'); }
+        else                          { _memActiveTypes.add(t);    c.classList.add('active'); }
+        // 모두 끄면 '전체'로 복귀
+        if (_memActiveTypes.size === 0) {
+          _memActiveTypes = new Set(Object.keys(MEMBER_TYPE_LABELS));
+          all.classList.add('active');
+        }
+        memberRenderList();
+      };
+      wrap.appendChild(c);
+    });
+}
+
+function _memBuildSegmentSelect() {
+  const sel = document.getElementById('mem-segment-select');
+  sel.innerHTML = '';
+  const opt0 = document.createElement('option');
+  opt0.value = ''; opt0.textContent = '전체 구간';
+  sel.appendChild(opt0);
+
+  const segs = Array.from(new Set(_memIndex.map(x => x.segment)));
+  const pts   = segs.filter(s => /_0$/.test(s)).sort();
+  const spans = segs.filter(s => /^P\d+_P\d+$/.test(s)).sort();
+
+  if (pts.length) {
+    const og = document.createElement('optgroup'); og.label = '지점';
+    pts.forEach(s => {
+      const o = document.createElement('option');
+      o.value = s; o.textContent = s.replace('_0', '');
+      og.appendChild(o);
+    });
+    sel.appendChild(og);
+  }
+  if (spans.length) {
+    const og = document.createElement('optgroup'); og.label = '경간';
+    spans.forEach(s => {
+      const o = document.createElement('option');
+      o.value = s; o.textContent = s.replace('_', '~');
+      og.appendChild(o);
+    });
+    sel.appendChild(og);
+  }
+  sel.onchange = () => { _memActiveSegment = sel.value; memberRenderList(); };
+}
+
+function memberRenderList() {
+  if (!_memInitDone && (!memberCodes || Object.keys(memberCodes).length === 0)) return;
+  const body = document.getElementById('mem-list-body');
+  const lbl  = document.getElementById('mem-count-label');
+  if (!body) return;
+
+  const q = (document.getElementById('mem-list-search')?.value || '').trim().toLowerCase();
+  const filtered = _memIndex.filter(x => {
+    if (!_memActiveTypes.has(x.type)) return false;
+    if (_memActiveSegment && x.segment !== _memActiveSegment) return false;
+    if (q && !x.code.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  filtered.sort((a, b) => {
+    if (a.type !== b.type) return a.type.localeCompare(b.type);
+    if (a.segment !== b.segment) return a.segment.localeCompare(b.segment);
+    return a.code.localeCompare(b.code);
+  });
+
+  if (lbl) lbl.textContent = `${filtered.length.toLocaleString()}건`;
+
+  body.innerHTML = '';
+  if (filtered.length === 0) {
+    body.innerHTML = '<div style="color:var(--textMut);font-size:10px;padding:12px 4px;font-family:var(--mono);">검색 결과 없음</div>';
+    return;
+  }
+
+  const gradeColors = { A:'#4CAF50', B:'#8BC34A', C:'#FFC107', D:'#FF9800', E:'#F44336' };
+  let curType = '';
+  filtered.forEach(x => {
+    if (x.type !== curType) {
+      curType = x.type;
+      const gt = document.createElement('div');
+      gt.className = 'insp-list-group-title';
+      gt.textContent = `${MEMBER_TYPE_LABELS[x.type] || x.type}`;
+      body.appendChild(gt);
+    }
+    const firstGid = x.globalIds[0];
+    const grade = (memberGrades[firstGid] || '').toString().toUpperCase();
+    const gColor = gradeColors[grade] || '#5A7A99';
+    const segLabel = x.segment.replace('_0', '').replace('_', '~');
+
+    const item = document.createElement('div');
+    item.className = 'insp-list-item';
+    item.style.flexDirection = 'column';
+    item.style.alignItems = 'stretch';
+    item.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+        <span class="mem-list-item-code">${x.code}</span>
+        ${grade ? `<span class="mem-grade-badge" style="background:${gColor};">${grade}</span>` : ''}
+      </div>
+      <div class="mem-list-item-sub">${segLabel} · ${x.globalIds.length} mesh</div>
+    `;
+    item.onclick = () => {
+      body.querySelectorAll('.insp-list-item').forEach(el => el.classList.remove('active'));
+      item.classList.add('active');
+      memberSelectByGlobalId(firstGid);
+    };
+    body.appendChild(item);
+  });
+}
+
+// 리스트 클릭 → 3D 부재 하이라이트 + INFO 탭 표시
+function memberSelectByGlobalId(globalId) {
+  let target = null;
+  bridgeGroup.traverse(c => { if (c.isMesh && c.name === globalId && !target) target = c; });
+  if (!target) {
+    console.warn(`[부재] globalId ${globalId} 에 해당하는 mesh 없음`);
+    return;
+  }
+  highlightMesh(target);
+  showMemberInfo(globalId, memberCodes[globalId] || '');
 }
 
 /* ══════════════════════════════════════════════════════
@@ -1698,6 +1952,7 @@ function inspOpenByMemberId(memberId) {
   document.getElementById('tab-inspection-btn').classList.add('active');
   document.getElementById('tab-sensors').style.display    = 'none';
   document.getElementById('tab-info').style.display       = 'none';
+  document.getElementById('tab-members').style.display    = 'none';
   document.getElementById('tab-inspection').style.display = 'block';
   const searchEl = document.getElementById('insp-list-search');
   if (searchEl) searchEl.value = '';
@@ -1733,6 +1988,7 @@ function inspClose() {
   document.getElementById('tab-inspection-btn').classList.add('active');
   document.getElementById('tab-sensors').style.display    = 'none';
   document.getElementById('tab-info').style.display       = 'none';
+  document.getElementById('tab-members').style.display    = 'none';
   document.getElementById('tab-inspection').style.display = 'block';
   inspRenderList(document.getElementById('insp-list-search')?.value || '');
   // 3D 하이라이트 + hover 모두 원복
