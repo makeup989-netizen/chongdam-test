@@ -1228,10 +1228,11 @@ function updateSensorScale(modelSize) {
 
 // 카메라 컨트롤
 let isDragging=false, prevX=0, prevY=0;
+let _clickStartX=0, _clickStartY=0;   // 드래그/클릭 구분용 시작 좌표
 let theta=-Math.PI/8, phi=Math.PI/3.5, radius=1200;
 let panX=0, panY=0, panZ=0;
 
-canvas.addEventListener('mousedown', e => { if(e.button===0){isDragging=true;prevX=e.clientX;prevY=e.clientY;} });
+canvas.addEventListener('mousedown', e => { if(e.button===0){isDragging=true;prevX=e.clientX;prevY=e.clientY;_clickStartX=e.clientX;_clickStartY=e.clientY;} });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 window.addEventListener('mouseup', ()=>{ isDragging=false; });
 window.addEventListener('mousemove', e => {
@@ -1287,6 +1288,8 @@ canvas.addEventListener('mousemove', e => {
 canvas.addEventListener('mouseleave', () => { clearHover(); canvas.style.cursor = 'default'; });
 
 canvas.addEventListener('click', e => {
+  // 회전/패닝 드래그였으면 클릭 처리 스킵 (하이라이트 풀리는 버그 방지)
+  if (Math.hypot(e.clientX - _clickStartX, e.clientY - _clickStartY) > 4) return;
   const rect=canvas.getBoundingClientRect();
   const mouse=new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1,-((e.clientY-rect.top)/rect.height)*2+1);
   const ray=new THREE.Raycaster();
