@@ -1790,6 +1790,17 @@ function memberRenderList() {
   });
 }
 
+// 부재 타입별 추천 시점 (theta=수평회전, phi=수직각도)
+const MEMBER_VIEW_ANGLES = {
+  CB: { theta: -Math.PI/8, phi: -Math.PI/3   }, // 가로보 - 아래에서 위
+  VL: { theta: -Math.PI/2, phi:  Math.PI/12  }, // V-Leg - 좌측에서 우측
+  GD: { theta: -Math.PI/8, phi: -Math.PI/3   }, // 거더 - 아래에서 위
+  TB: { theta: -Math.PI/8, phi: -Math.PI/3   }, // 횡박스 - 아래에서 위
+  PI: { theta:  Math.PI/2, phi:  Math.PI/12  }, // 교각 - 우측에서 좌측
+  RD: { theta:  0,         phi:  Math.PI/2.2 }, // 교면포장 - 위에서 아래
+  DK: { theta:  0,         phi: -Math.PI/3   }, // 바닥판 - 아래에서 위
+};
+
 // 리스트 클릭 → 3D 부재 하이라이트 + INFO 탭 표시 + 카메라 포커스
 function memberSelectByGlobalId(globalId) {
   let target = null;
@@ -1802,17 +1813,26 @@ function memberSelectByGlobalId(globalId) {
   showMemberInfo(globalId, memberCodes[globalId] || '');
 
   // 같은 code의 모든 mesh를 합쳐서 카메라 포커스
-  const code = memberCodes[globalId];
+  const code = memberCodes[globalId] || '';
+  const memberType = (_memParseCode(code) || {}).type;
   const meshes = [];
   if (code) {
     bridgeGroup.traverse(c => { if (c.isMesh && memberCodes[c.name] === code) meshes.push(c); });
   }
-  focusOnMeshes(meshes.length ? meshes : [target]);
+  focusOnMeshes(meshes.length ? meshes : [target], memberType);
+}
+
+// 가장 짧은 방향으로 각도 보간 (-π ~ π 한 바퀴 안 돌게)
+function _lerpAngle(a, b, t) {
+  let d = b - a;
+  while (d >  Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return a + d * t;
 }
 
 // 부재 mesh들의 월드 bounding box 중심으로 카메라 부드럽게 이동
 let _focusAnimId = null;
-function focusOnMeshes(meshes) {
+function focusOnMeshes(meshes, memberType) {
   if (!meshes || !meshes.length) return;
   const box = new THREE.Box3();
   meshes.forEach(m => box.expandByObject(m));
@@ -1822,8 +1842,14 @@ function focusOnMeshes(meshes) {
   const maxDim = Math.max(size.x, size.y, size.z);
   const targetRadius = Math.max(maxDim * 2.2, 25);
 
+  // 부재 타입에 맞는 시점 (없으면 현재 각도 유지)
+  const angle = MEMBER_VIEW_ANGLES[memberType];
+  const targetTheta = angle ? angle.theta : theta;
+  const targetPhi   = angle ? angle.phi   : phi;
+
   const startPanX = panX, startPanY = panY, startPanZ = panZ;
   const startRadius = radius;
+  const startTheta = theta, startPhi = phi;
   const t0 = performance.now();
   const duration = 700;
   if (_focusAnimId) cancelAnimationFrame(_focusAnimId);
@@ -1835,6 +1861,8 @@ function focusOnMeshes(meshes) {
     panY  = startPanY  + (center.y      - startPanY ) * e;
     panZ  = startPanZ  + (center.z      - startPanZ ) * e;
     radius = startRadius + (targetRadius - startRadius) * e;
+    theta = _lerpAngle(startTheta, targetTheta, e);
+    phi   = startPhi + (targetPhi - startPhi) * e;
     if (u < 1) _focusAnimId = requestAnimationFrame(step);
     else _focusAnimId = null;
   }
